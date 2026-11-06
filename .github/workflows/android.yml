@@ -1,0 +1,85 @@
+name: Build Android APK
+
+# Builds the Flip Jar debug APK on GitHub's servers, so no Android SDK is needed locally.
+# Runs on every push to main/master and can be started by hand from the Actions tab.
+# The APK appears under the run's "Artifacts" section (flipjar-debug-apk).
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.4.1"
+  GODOT_RELEASE: "stable"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android build tools
+        run: |
+          SDKM="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "build-tools;34.0.0" "platforms;android-34" > /dev/null
+
+      - name: Download Godot and its export templates
+        run: |
+          set -e
+          V="${GODOT_VERSION}-${GODOT_RELEASE}"
+          BASE="https://github.com/godotengine/godot/releases/download/${V}"
+          curl -sSL -o godot.zip "${BASE}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${V}_linux.x86_64" godot
+          chmod +x godot
+          curl -sSL -o templates.tpz "${BASE}/Godot_v${V}_export_templates.tpz"
+          unzip -q templates.tpz -d templates_tmp
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          mv templates_tmp/templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}"
+
+      - name: Create a debug keystore and point Godot at the SDK
+        run: |
+          set -e
+          keytool -genkeypair -v -keystore "$HOME/debug.keystore" -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+          mkdir -p "$HOME/.config/godot"
+          for f in editor_settings-4.4.tres editor_settings-4.tres; do
+            cat > "$HOME/.config/godot/$f" <<SETTINGS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_SDK_ROOT}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/debug_keystore = "${HOME}/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          SETTINGS
+          done
+
+      - name: Import the project
+        run: ./godot --headless --path game --import
+
+      - name: Export the debug APK
+        run: |
+          set -e
+          mkdir -p export
+          ./godot --headless --path game --export-debug "Android" "$GITHUB_WORKSPACE/export/flipjar-debug.apk"
+          ls -la export
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: flipjar-debug-apk
+          path: export/flipjar-debug.apk
+          if-no-files-found: error
