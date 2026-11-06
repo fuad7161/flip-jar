@@ -1,0 +1,92 @@
+[gd_scene format=3 uid="uid://y60ntolxbukl"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://c716pd6rjge0b" path="res://scripts/preview.gd" id="2_preview"]
+
+[node name="Main" type="Node2D" unique_id=862234976]
+script = ExtResource("1_main")
+
+[node name="Camera" type="Camera2D" parent="." unique_id=961195218]
+position = Vector2(360, 640)
+ignore_rotation = false
+
+[node name="Pieces" type="Node2D" parent="." unique_id=2044016545]
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=209418119]
+
+[node name="Score" type="Label" parent="UI" unique_id=1928768932]
+offset_left = 30.0
+offset_top = 40.0
+offset_right = 400.0
+offset_bottom = 110.0
+theme_override_font_sizes/font_size = 52
+text = "0"
+vertical_alignment = 1
+
+[node name="Flips" type="Label" parent="UI" unique_id=1856528230]
+offset_left = 400.0
+offset_top = 40.0
+offset_right = 690.0
+offset_bottom = 110.0
+theme_override_font_sizes/font_size = 30
+text = "Flips 3"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="NextLabel" type="Label" parent="UI" unique_id=126789510]
+offset_left = 500.0
+offset_top = 118.0
+offset_right = 690.0
+offset_bottom = 150.0
+theme_override_font_sizes/font_size = 22
+text = "NEXT"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="NextPreview" type="Node2D" parent="UI" unique_id=2083918029]
+position = Vector2(634, 180)
+script = ExtResource("2_preview")
+
+[node name="FlipButton" type="Button" parent="UI" unique_id=1369840581]
+offset_left = 210.0
+offset_top = 1100.0
+offset_right = 510.0
+offset_bottom = 1210.0
+theme_override_font_sizes/font_size = 40
+text = "FLIP (3)"
+
+[node name="GameOver" type="Panel" parent="UI" unique_id=761508675]
+visible = false
+modulate = Color(1, 1, 1, 0.94)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Text" type="Label" parent="UI/GameOver" unique_id=338651601]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 44
+text = "Jar overflowed!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Retry" type="Button" parent="UI/GameOver" unique_id=495099228]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -300.0
+offset_right = 160.0
+offset_bottom = -190.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_font_sizes/font_size = 40
+text = "PLAY AGAIN"

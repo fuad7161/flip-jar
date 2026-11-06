@@ -1,0 +1,102 @@
+name: Build Play Store AAB
+
+# Builds a signed release Android App Bundle for the Play Store on GitHub's servers.
+# Start it from the Actions tab (Run workflow) or push a tag like v0.1.0.
+# Needs three repository secrets (create them with game/tools/make_release_keystore.sh):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_ALIAS, ANDROID_KEYSTORE_PASSWORD
+# The version code is the GitHub run number, so every build is accepted by Play as newer.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.7.2"
+  GODOT_RELEASE: "stable"
+
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android build tools
+        run: |
+          SDKM="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "build-tools;36.0.0" "platforms;android-36" > /dev/null
+
+      - name: Download Godot and its export templates
+        run: |
+          set -e
+          V="${GODOT_VERSION}-${GODOT_RELEASE}"
+          BASE="https://github.com/godotengine/godot/releases/download/${V}"
+          curl -sSL -o godot.zip "${BASE}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${V}_linux.x86_64" godot
+          chmod +x godot
+          curl -sSL -o templates.tpz "${BASE}/Godot_v${V}_export_templates.tpz"
+          unzip -q templates.tpz -d templates_tmp
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          mv templates_tmp/templates "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}"
+
+      - name: Restore the upload keystore from secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -e
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Secret ANDROID_KEYSTORE_BASE64 is missing. Run game/tools/make_release_keystore.sh and add the secrets."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$HOME/upload.jks"
+          mkdir -p "$HOME/.config/godot"
+          for f in editor_settings-4.7.tres editor_settings-4.tres; do
+            cat > "$HOME/.config/godot/$f" <<SETTINGS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_SDK_ROOT}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          SETTINGS
+          done
+
+      - name: Stamp the version
+        run: |
+          set -e
+          CODE="${GITHUB_RUN_NUMBER}"
+          NAME="${GITHUB_REF_NAME#v}"
+          case "$GITHUB_REF_NAME" in v*) ;; *) NAME="0.1.${CODE}" ;; esac
+          sed -i "s/^version\/code=.*/version\/code=${CODE}/" game/export_presets.cfg
+          sed -i "s/^version\/name=.*/version\/name=\"${NAME}\"/" game/export_presets.cfg
+          grep -E "^version/" game/export_presets.cfg
+
+      - name: Import the project
+        run: ./godot --headless --path game --import
+
+      - name: Export the signed release AAB
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$HOME/upload.jks"
+          mkdir -p export
+          ./godot --headless --path game --install-android-build-template --export-release "Android AAB" "$GITHUB_WORKSPACE/export/flipjar-release.aab"
+          ls -la export
+
+      - name: Upload the AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: flipjar-release-aab
+          path: export/flipjar-release.aab
+          if-no-files-found: error

@@ -4,7 +4,7 @@ A one-thumb physics merge game with a twist: flip the whole jar upside down.
 See `../Knowledge.md` for the full brief.
 
 ## Run on desktop
-1. Install Godot 4.4 (standard build, not .NET) from https://godotengine.org/download
+1. Install Godot 4.7 (standard build, not .NET) from https://godotengine.org/download
 2. Open this folder (`game/`) in Godot, or run `godot --path game` from the project root.
 3. Mouse emulates touch: drag to aim, release to drop. Click FLIP to flip the jar.
 
@@ -50,10 +50,10 @@ bash game/tools/build_apk.sh             # every build: writes export/flipjar-de
 ```
 The same settings let you export from the Godot editor too: Project > Export > Android.
 
-**For the Play Store** switch the preset's export format to AAB, create a release keystore with
-`keytool`, and put its path and passwords in Editor Settings > Export > Android (release keystore).
-Change the package name in `export_presets.cfg` (`package/unique_name`) and the store link in
-`scripts/game.gd` (`STORE_LINK`) before publishing.
+**For the Play Store** run `bash game/tools/make_release_keystore.sh` once, add the three secrets it
+prints to the GitHub repository, then start the "Build Play Store AAB" workflow from the Actions tab
+(or push a tag such as `v0.1.0`). Download `flipjar-release-aab` and upload it in Play Console.
+The full publishing checklist is in `../store/PUBLISHING.md`.
 
 ## Not included yet
 - Online leaderboard and server-side daily seed (needs the Go backend and hosting)
