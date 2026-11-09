@@ -4,6 +4,7 @@ extends Node
 const PATH := "user://save.json"
 const EPOCH_DATE := "2026-11-01"  # day number 1
 const DAILY_ATTEMPTS := 3
+const HISTORY_MAX := 100
 
 var data := {}
 var disabled := false   # tests set this so nothing is written to disk
@@ -28,6 +29,12 @@ func _defaults() -> Dictionary:
 		"vibrate": true,
 		"theme": "classic",
 		"games_played": 0,
+		"profile": {"name": "Player", "avatar": 2},
+		"history": [],      # newest first: {t, mode, score, merges, best_tier, flips, shakes, secs}
+		"total_score": 0,
+		"total_merges": 0,
+		"total_secs": 0,
+		"best_tier": 0,
 	}
 
 
@@ -42,6 +49,10 @@ func load_data() -> void:
 	if parsed is Dictionary:
 		for k in parsed:
 			data[k] = parsed[k]
+	if not (data["history"] is Array):
+		data["history"] = []
+	if not (data["profile"] is Dictionary):
+		data["profile"] = {"name": "Player", "avatar": 2}
 
 
 func save() -> void:
@@ -87,8 +98,9 @@ func daily_best() -> int:
 	return int(data["daily"]["best"])
 
 
-## Records a finished run. Returns {"new_best": bool, "best": int}.
-func record_run(run_mode: String, score: int) -> Dictionary:
+## Records a finished run. `stats` may hold merges, best_tier, flips, shakes, secs.
+## Returns {"new_best": bool, "best": int}.
+func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 	var new_best := false
 	var best := 0
 	if run_mode == "daily":
@@ -104,6 +116,26 @@ func record_run(run_mode: String, score: int) -> Dictionary:
 		best = int(data["best_free"])
 	data["games_played"] = int(data["games_played"]) + 1
 	data["first_run_done"] = true
+	var entry := {
+		"t": int(Time.get_unix_time_from_system()),
+		"mode": run_mode,
+		"score": score,
+		"merges": int(stats.get("merges", 0)),
+		"best_tier": int(stats.get("best_tier", 0)),
+		"flips": int(stats.get("flips", 0)),
+		"shakes": int(stats.get("shakes", 0)),
+		"secs": int(stats.get("secs", 0)),
+		"new_best": new_best,
+	}
+	var hist: Array = data["history"]
+	hist.push_front(entry)
+	if hist.size() > HISTORY_MAX:
+		hist.resize(HISTORY_MAX)
+	data["history"] = hist
+	data["total_score"] = int(data["total_score"]) + score
+	data["total_merges"] = int(data["total_merges"]) + entry["merges"]
+	data["total_secs"] = int(data["total_secs"]) + entry["secs"]
+	data["best_tier"] = maxi(int(data["best_tier"]), entry["best_tier"])
 	save()
 	return {"new_best": new_best, "best": best}
 

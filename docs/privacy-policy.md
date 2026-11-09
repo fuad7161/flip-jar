@@ -27,4 +27,4 @@ If a future version adds online features such as leaderboards or ads, this polic
 
 ## Contact
 
-Questions about this policy: teamfinnix705@gmail.com
+Questions about this policy: fuadu202@gmail.com

@@ -29,6 +29,7 @@ window/stretch/aspect="keep"
 [input_devices]
 
 pointing/emulate_touch_from_mouse=true
+sensors/enable_accelerometer=true
 
 [physics]
 
@@ -40,4 +41,4 @@ common/physics_ticks_per_second=60
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
-environment/defaults/default_clear_color=Color(0.08, 0.09, 0.14, 1)
+environment/defaults/default_clear_color=Color(0.16, 0.08, 0.38, 1)

@@ -1,13 +1,20 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/preview.gd" id="2_preview"]
+[ext_resource type="Script" path="res://scripts/background.gd" id="3_bg"]
 
 [sub_resource type="StyleBoxFlat" id="panel_bg"]
-bg_color = Color(0.08, 0.09, 0.14, 0.94)
+bg_color = Color(0.16, 0.05, 0.3, 0.82)
 
 [node name="Game" type="Node2D"]
 script = ExtResource("1_game")
+
+[node name="BgLayer" type="CanvasLayer" parent="."]
+layer = -10
+
+[node name="Background" type="Node2D" parent="BgLayer"]
+script = ExtResource("3_bg")
 
 [node name="Camera" type="Camera2D" parent="."]
 position = Vector2(360, 640)
@@ -21,77 +28,103 @@ ignore_rotation = false
 
 [node name="Score" type="Label" parent="UI"]
 offset_left = 30.0
-offset_top = 36.0
-offset_right = 400.0
-offset_bottom = 106.0
-theme_override_font_sizes/font_size = 56
+offset_top = 14.0
+offset_right = 330.0
+offset_bottom = 94.0
+theme_override_font_sizes/font_size = 66
 text = "0"
 vertical_alignment = 1
 
 [node name="Mode" type="Label" parent="UI"]
-offset_left = 30.0
-offset_top = 108.0
+offset_left = 32.0
+offset_top = 92.0
 offset_right = 480.0
-offset_bottom = 140.0
-theme_override_colors/font_color = Color(0.75, 0.78, 0.9, 1)
+offset_bottom = 124.0
+theme_override_colors/font_color = Color(1, 0.9, 1, 0.9)
+theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
 text = "FREE PLAY"
 vertical_alignment = 1
 
-[node name="Flips" type="Label" parent="UI"]
-offset_left = 400.0
-offset_top = 40.0
-offset_right = 690.0
-offset_bottom = 100.0
-theme_override_font_sizes/font_size = 30
-text = "Flips 3"
-horizontal_alignment = 2
-vertical_alignment = 1
-
 [node name="NextLabel" type="Label" parent="UI"]
-offset_left = 500.0
-offset_top = 112.0
+offset_left = 560.0
+offset_top = 14.0
 offset_right = 690.0
-offset_bottom = 144.0
-theme_override_colors/font_color = Color(0.75, 0.78, 0.9, 1)
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(1, 0.9, 1, 0.9)
+theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
 text = "NEXT"
-horizontal_alignment = 2
+horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="NextPreview" type="Node2D" parent="UI"]
-position = Vector2(640, 186)
+position = Vector2(625, 84)
 script = ExtResource("2_preview")
+
+[node name="FlipButton" type="Button" parent="UI"]
+offset_left = 24.0
+offset_top = 132.0
+offset_right = 248.0
+offset_bottom = 214.0
+theme_override_font_sizes/font_size = 32
+text = "FLIP 3"
+
+[node name="ShakeButton" type="Button" parent="UI"]
+offset_left = 262.0
+offset_top = 132.0
+offset_right = 486.0
+offset_bottom = 214.0
+theme_override_font_sizes/font_size = 32
+text = "SHAKE 2"
+
+[node name="ChargeLabel" type="Label" parent="UI"]
+offset_left = 500.0
+offset_top = 132.0
+offset_right = 696.0
+offset_bottom = 172.0
+theme_override_colors/font_color = Color(1, 0.95, 0.6, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 20
+text = "BONUS"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Charge" type="ProgressBar" parent="UI"]
+offset_left = 508.0
+offset_top = 176.0
+offset_right = 690.0
+offset_bottom = 204.0
+max_value = 1.0
+step = 0.0
+show_percentage = false
 
 [node name="Hint" type="Label" parent="UI"]
 offset_left = 60.0
 offset_top = 560.0
 offset_right = 660.0
 offset_bottom = 640.0
-theme_override_colors/font_color = Color(1, 1, 1, 0.9)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 8
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.95)
+theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 36
 text = "Drag to aim, release to drop"
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="FlipButton" type="Button" parent="UI"]
-offset_left = 210.0
-offset_top = 1100.0
-offset_right = 510.0
-offset_bottom = 1210.0
-theme_override_font_sizes/font_size = 40
-text = "FLIP (3)"
+[node name="Banners" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 2
 
 [node name="Toast" type="Label" parent="UI"]
 offset_left = 60.0
-offset_top = 1222.0
+offset_top = 1200.0
 offset_right = 660.0
-offset_bottom = 1262.0
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 24
+offset_bottom = 1250.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 26
 text = "Copied!"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -112,22 +145,25 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -290.0
-offset_top = -420.0
+offset_top = -470.0
 offset_right = 290.0
-offset_bottom = 420.0
+offset_bottom = 470.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 18
+alignment = 1
 
 [node name="Title" type="Label" parent="UI/GameOver/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 60
+theme_override_colors/font_color = Color(1, 0.86, 0.3, 1)
+theme_override_constants/outline_size = 14
+theme_override_font_sizes/font_size = 64
 text = "Jar overflowed!"
 horizontal_alignment = 1
 
 [node name="Stats" type="Label" parent="UI/GameOver/Box"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 34
+theme_override_font_sizes/font_size = 32
 text = "Score  0"
 horizontal_alignment = 1
 
@@ -136,25 +172,25 @@ custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
 [node name="Retry" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 96)
+custom_minimum_size = Vector2(0, 104)
 layout_mode = 2
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 38
 text = "PLAY AGAIN"
 
 [node name="Share" type="Button" parent="UI/GameOver/Box"]
 custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 32
 text = "SHARE ON WHATSAPP"
 
 [node name="Copy" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 80)
+custom_minimum_size = Vector2(0, 84)
 layout_mode = 2
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 28
 text = "COPY RESULT"
 
 [node name="Menu" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 80)
+custom_minimum_size = Vector2(0, 84)
 layout_mode = 2
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 28
 text = "MENU"
