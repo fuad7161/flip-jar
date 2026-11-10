@@ -13,10 +13,12 @@ var letters: Array[Label] = []
 @onready var daily_button: Button = $UI/Box/Daily
 @onready var daily_info: Label = $UI/Box/DailyInfo
 @onready var free_button: Button = $UI/Box/Free
+@onready var diff_box: HBoxContainer = $UI/Box/Difficulty
 @onready var free_info: Label = $UI/Box/FreeInfo
 @onready var streak_label: Label = $UI/Box/Streak
 @onready var themes_box: HBoxContainer = $UI/Box/Themes
 @onready var sound_toggle: CheckButton = $UI/Box/Settings/Sound
+@onready var music_toggle: CheckButton = $UI/Box/Settings/Music
 @onready var vibrate_toggle: CheckButton = $UI/Box/Settings/Vibrate
 
 
@@ -28,19 +30,22 @@ func _ready() -> void:
 	UiKit.candy(free_button, "green")
 	UiKit.candy(profile_button, "blue", false)
 	UiKit.juice(sound_toggle, false)
+	UiKit.juice(music_toggle, false)
 	UiKit.juice(vibrate_toggle, false)
 	_build_title()
 	daily_button.pressed.connect(_play.bind("daily"))
 	free_button.pressed.connect(_play.bind("free"))
 	profile_button.pressed.connect(_open_profile)
 	sound_toggle.button_pressed = Save.data["sound"]
+	music_toggle.button_pressed = Save.data["music"]
 	vibrate_toggle.button_pressed = Save.data["vibrate"]
 	sound_toggle.toggled.connect(func(on: bool) -> void: Save.data["sound"] = on; Save.save(); Sfx.play("click"))
+	music_toggle.toggled.connect(func(on: bool) -> void: Save.data["music"] = on; Save.save(); Sfx.update_music(); Sfx.play("click"))
 	vibrate_toggle.toggled.connect(func(on: bool) -> void: Save.data["vibrate"] = on; Save.save(); Save.vibrate(30))
 	_refresh()
 	# Everything bubbles in one after another.
 	var i := 0
-	for c in [profile_button, daily_button, daily_info, free_button, free_info, streak_label, themes_box]:
+	for c in [profile_button, daily_button, daily_info, diff_box, free_button, free_info, streak_label, themes_box]:
 		UiKit.pop_in(c, 0.25 + i * 0.07)
 		i += 1
 
@@ -75,10 +80,25 @@ func _refresh() -> void:
 	daily_button.text = "DAILY  #%d" % Save.day_number()
 	daily_button.disabled = left <= 0
 	if left > 0:
-		daily_info.text = "%d of %d tries left   ·   today's best %d" % [left, Save.DAILY_ATTEMPTS, Save.daily_best()]
+		daily_info.text = "%d of %d tries left  ·  best %d  ·  medium" % [left, Save.DAILY_ATTEMPTS, Save.daily_best()]
 	else:
 		daily_info.text = "Done for today: %d   ·   new jar at 00:00 UTC" % Save.daily_best()
-	free_info.text = "best %d   ·   %d games played" % [int(Save.data["best_free"]), int(Save.data["games_played"])]
+	var diff: String = Save.data.get("difficulty", "medium")
+	free_info.text = "%s best %d   ·   %d games played" % [diff.capitalize(), Save.best_for(diff), int(Save.data["games_played"])]
+	for b in diff_box.get_children():
+		b.queue_free()
+	var diff_colors := {"easy": "green", "medium": "orange", "hard": "red"}
+	for key in ["easy", "medium", "hard"]:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 76)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 26)
+		b.text = ("✓ " if key == diff else "") + key.to_upper()
+		UiKit.candy(b, diff_colors[key] if key == diff else "purple", key == diff)
+		if key != diff:
+			b.modulate = Color(1, 1, 1, 0.75)
+		b.pressed.connect(_pick_difficulty.bind(key))
+		diff_box.add_child(b)
 	var streak := Save.current_streak()
 	if streak > 0:
 		streak_label.text = "Daily streak: %d day%s   (best %d)" % [streak, "" if streak == 1 else "s", int(Save.data["streak_best"])]
@@ -103,6 +123,16 @@ func _refresh() -> void:
 			b.disabled = true
 		themes_box.add_child(b)
 	queue_redraw()
+
+
+func _pick_difficulty(key: String) -> void:
+	Sfx.play("click")
+	Save.data["difficulty"] = key
+	Save.save()
+	_refresh()
+	for b in diff_box.get_children():
+		if not b.is_queued_for_deletion():
+			UiKit.pop_in(b)
 
 
 func _pick_theme(key: String) -> void:

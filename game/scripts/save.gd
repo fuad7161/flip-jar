@@ -26,6 +26,7 @@ func _defaults() -> Dictionary:
 		"first_run_done": false,
 		"flip_hint_done": false,
 		"sound": true,
+		"music": true,
 		"vibrate": true,
 		"theme": "classic",
 		"games_played": 0,
@@ -35,6 +36,8 @@ func _defaults() -> Dictionary:
 		"total_merges": 0,
 		"total_secs": 0,
 		"best_tier": 0,
+		"difficulty": "medium",
+		"best_diff": {"easy": 0, "medium": 0, "hard": 0},
 	}
 
 
@@ -51,6 +54,8 @@ func load_data() -> void:
 			data[k] = parsed[k]
 	if not (data["history"] is Array):
 		data["history"] = []
+	if not (data["best_diff"] is Dictionary):
+		data["best_diff"] = {"easy": 0, "medium": 0, "hard": 0}
 	if not (data["profile"] is Dictionary):
 		data["profile"] = {"name": "Player", "avatar": 2}
 
@@ -111,9 +116,12 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 		best = int(data["daily"]["best"])
 		_update_streak()
 	else:
-		new_best = score > int(data["best_free"])
+		var diff: String = stats.get("diff", "medium")
+		var bd: Dictionary = data["best_diff"]
+		new_best = score > int(bd.get(diff, 0))
+		bd[diff] = maxi(score, int(bd.get(diff, 0)))
+		best = int(bd[diff])
 		data["best_free"] = maxi(score, int(data["best_free"]))
-		best = int(data["best_free"])
 	data["games_played"] = int(data["games_played"]) + 1
 	data["first_run_done"] = true
 	var entry := {
@@ -125,6 +133,7 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 		"flips": int(stats.get("flips", 0)),
 		"shakes": int(stats.get("shakes", 0)),
 		"secs": int(stats.get("secs", 0)),
+		"diff": str(stats.get("diff", "medium")),
 		"new_best": new_best,
 	}
 	var hist: Array = data["history"]
@@ -138,6 +147,11 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 	data["best_tier"] = maxi(int(data["best_tier"]), entry["best_tier"])
 	save()
 	return {"new_best": new_best, "best": best}
+
+
+## Best free-play score on one difficulty.
+func best_for(diff: String) -> int:
+	return int(data["best_diff"].get(diff, 0))
 
 
 func _update_streak() -> void:

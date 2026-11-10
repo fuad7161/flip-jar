@@ -52,6 +52,19 @@ func _run() -> void:
 	root.add_child(main)
 	await process_frame
 	_check(main.mode == "daily", "game should start in the mode chosen on the menu")
+	_check(root.get_node("Sfx").music.stream != null, "background music should be loaded")
+	_check(root.get_node("Sfx").music.playing, "background music should be playing")
+
+	# Pause before anything is dropped: it must freeze the game and not use a daily try.
+	main._pause()
+	_check(paused and main.pause_panel.visible, "pause should freeze the tree and show the menu")
+	_check(not main.pause_diff_box.visible, "daily runs can't switch difficulty")
+	main._resume()
+	_check(not paused and not main.pause_panel.visible, "resume should unfreeze the game")
+	main._pause()
+	main._restart_from_pause("")
+	_check(not paused and save.attempts_left() == 3, "restarting an empty daily run must not use a try")
+	await physics_frame
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
@@ -130,8 +143,30 @@ func _run() -> void:
 	await physics_frame
 	print("after restart: score=%d flips=%d pieces=%d over_visible=%s" % [
 		main.score, main.flips_left, main.pieces.get_child_count(), main.over_panel.visible])
-	_check(main.score == 0 and main.flips_left == 3 and main.shakes_left == main.START_SHAKES and not main.over_panel.visible, "restart should reset state")
+	_check(main.score == 0 and main.flips_left == int(main.cfg["flips"]) and main.shakes_left == int(main.cfg["shakes"]) and not main.over_panel.visible, "restart should reset state")
 	_check(main.pieces.get_child_count() == 1 and main.held != null, "restart should leave only the held piece")
+
+	# A combo blast shrinks the biggest piece one size instead of deleting it.
+	var big = main._make_piece(6, Vector2(360, 900), false)
+	await physics_frame
+	_check(main._shrink_biggest() == 1, "shrink should find the big piece")
+	await process_frame
+	var tiers := []
+	for p in main.pieces.get_children():
+		if p is Piece and not p.is_queued_for_deletion():
+			tiers.append(p.tier)
+	_check(not is_instance_valid(big) or big.is_queued_for_deletion(), "the big piece should be replaced")
+	_check(5 in tiers and not (6 in tiers), "shrink should leave a piece one size smaller")
+	_check(main.cfg["vanish_tier"] == 10, "only Suns should vanish")
+
+	# Quitting a free-play run midway still saves it to history.
+	main.mode = "free"
+	main.drops = 3
+	main.score = 77
+	var hist_before: int = save.data["history"].size()
+	main._abandon_run()
+	_check(save.data["history"].size() == hist_before + 1 and int(save.data["history"][0]["score"]) == 77, "a quit run should be saved")
+	_check(save.attempts_left() == 2, "quitting free play must not use daily attempts")
 
 	# Free mode records its own best.
 	var res: Dictionary = save.record_run("free", 123)

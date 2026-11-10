@@ -51,6 +51,7 @@ func setup(new_tier: int, pop := true) -> void:
 	pm.bounce = 0.1
 	physics_material_override = pm
 	linear_damp = 0.3
+	continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE  # no tunnelling through walls at flip speed
 	angular_damp = 0.6
 	contact_monitor = true
 	max_contacts_reported = 8

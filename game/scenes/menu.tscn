@@ -51,7 +51,7 @@ text = "Drop. Merge. Flip. Shake!"
 horizontal_alignment = 1
 
 [node name="Spacer" type="Control" parent="UI/Box"]
-custom_minimum_size = Vector2(0, 150)
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 
 [node name="Daily" type="Button" parent="UI/Box"]
@@ -67,6 +67,10 @@ theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
 text = "3 of 3 tries left"
 horizontal_alignment = 1
+
+[node name="Difficulty" type="HBoxContainer" parent="UI/Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
 
 [node name="Free" type="Button" parent="UI/Box"]
 custom_minimum_size = Vector2(0, 116)
@@ -108,13 +112,19 @@ theme_override_constants/separation = 12
 [node name="Settings" type="HBoxContainer" parent="UI/Box"]
 layout_mode = 2
 alignment = 1
-theme_override_constants/separation = 30
+theme_override_constants/separation = 16
 
 [node name="Sound" type="CheckButton" parent="UI/Box/Settings"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 button_pressed = true
 text = "Sound"
+
+[node name="Music" type="CheckButton" parent="UI/Box/Settings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+button_pressed = true
+text = "Music"
 
 [node name="Vibrate" type="CheckButton" parent="UI/Box/Settings"]
 layout_mode = 2

@@ -3,12 +3,16 @@ extends Node
 
 const NAMES := ["drop", "pop", "flip", "over", "best", "click"]
 const POOL := 8
+const MUSIC_DB := -11.0
 
 var streams := {}
 var players: Array[AudioStreamPlayer] = []
+var music: AudioStreamPlayer
 
 
 func _ready() -> void:
+	# Keep sounds and music going while the game is paused.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	for n in NAMES:
 		var path := "res://audio/%s.wav" % n
 		if ResourceLoader.exists(path):
@@ -17,6 +21,38 @@ func _ready() -> void:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		players.append(p)
+	_setup_music()
+
+
+## Background music: one seamless loop that keeps playing across every screen.
+func _setup_music() -> void:
+	music = AudioStreamPlayer.new()
+	music.volume_db = MUSIC_DB
+	add_child(music)
+	var path := "res://audio/music.wav"
+	if not ResourceLoader.exists(path):
+		return
+	var stream: AudioStream = load(path)
+	if stream is AudioStreamWAV:
+		var wav := stream as AudioStreamWAV
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		wav.loop_end = int(wav.get_length() * wav.mix_rate)
+	music.stream = stream
+	# Fallback in case the stream ever stops instead of looping.
+	music.finished.connect(func() -> void: if Save.data["music"]: music.play())
+	update_music()
+
+
+## Starts or stops the music to match the Music setting.
+func update_music() -> void:
+	if music == null or music.stream == null:
+		return
+	var on: bool = Save.data["music"]
+	if on and not music.playing:
+		music.play()
+	elif not on and music.playing:
+		music.stop()
 
 
 func play(name: String, pitch := 1.0, volume_db := 0.0) -> void:

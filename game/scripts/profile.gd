@@ -172,7 +172,7 @@ func _history_row(h: Dictionary, number: int) -> Control:
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_theme_constant_override("separation", 0)
-	var head := "#%d  %s" % [number, "DAILY" if daily else "FREE PLAY"]
+	var head := "#%d  %s" % [number, "DAILY" if daily else str(h.get("diff", "medium")).to_upper()]
 	if h.get("new_best", false):
 		head += "  ★ BEST"
 	left.add_child(_label(head, 24, Color("#ffe14d") if h.get("new_best", false) else Color.WHITE, false))

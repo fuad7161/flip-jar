@@ -5,15 +5,8 @@ const JAR_LEFT := 60.0
 const JAR_RIGHT := 660.0
 const JAR_TOP := 240.0      # drop side when not flipped
 const JAR_BOTTOM := 1040.0  # floor when not flipped
-const WALL := 24.0
-const DANGER_DEPTH := 150.0 # overflow zone measured from the drop side
-const START_FLIPS := 3
-const MAX_FLIPS := 3        # kept for the share text and older tests: flips you start with
-const START_SHAKES := 2
+const WALL := 120.0          # thick walls so fast pieces can't tunnel through after a flip
 const MAX_STOCK := 5        # most flips or shakes you can bank
-const SPAWN_TIERS := 5      # only the 5 smallest tiers are ever dropped
-const DROP_DELAY := 0.55
-const OVERFLOW_TIME := 1.0
 const FLIP_GRACE := 1.5
 const SHAKE_GRACE := 1.8
 const SETTLED_SPEED := 40.0
@@ -21,23 +14,38 @@ const FLIP_HINT_AFTER_DROPS := 6
 const STORE_LINK := "https://play.google.com/store/apps/details?id=com.flipjar.game"
 
 # --- Tuning (rough first numbers; tweak freely) ---
-const VANISH_TIER := 8         # a piece that reaches this tier (Moon) glows, then pops by itself
+## Per-difficulty settings. Daily always uses "medium" so everyone plays the same jar.
+##   flips/shakes   what you start with
+##   spawn          how many of the smallest tiers can be dropped (more = messier jar)
+##   drop_delay     seconds before the next piece appears
+##   danger         depth of the overflow zone from the drop side (px)
+##   overflow       seconds a piece may rest in the danger zone before game over
+##   combo_window   max seconds between merges of one chain (a new drop also ends the chain)
+##   reward_combo   merges in a row that earn a random +1 flip or +1 shake
+##   blast_combo    merges in a row that shrink the biggest piece by one size
+##   blast_cooldown seconds between blasts
+##   vanish_tier    a piece of this tier pops by itself (10 = Sun, the biggest; only Suns vanish now)
+const DIFFICULTY := {
+	"easy": {"name": "EASY", "flips": 3, "shakes": 2, "spawn": 4, "drop_delay": 0.6, "danger": 140.0,
+		"overflow": 1.5, "combo_window": 0.9, "reward_combo": 3, "blast_combo": 4, "blast_cooldown": 8.0, "vanish_tier": 10},
+	"medium": {"name": "MEDIUM", "flips": 2, "shakes": 1, "spawn": 5, "drop_delay": 0.55, "danger": 150.0,
+		"overflow": 1.0, "combo_window": 0.7, "reward_combo": 3, "blast_combo": 4, "blast_cooldown": 15.0, "vanish_tier": 10},
+	"hard": {"name": "HARD", "flips": 1, "shakes": 1, "spawn": 5, "drop_delay": 0.45, "danger": 180.0,
+		"overflow": 0.8, "combo_window": 0.5, "reward_combo": 4, "blast_combo": 5, "blast_cooldown": 25.0, "vanish_tier": 10},
+}
 const VANISH_DELAY := 1.2
 const VANISH_BONUS := 3        # vanish points = merge_score(tier) * this
-const COMBO_WINDOW := 0.6      # seconds between merges that still count as one combo
-const BLAST_MIN_TIER := 4      # combos only blast pieces at least this big (Pudding+)
-const BLAST_COOLDOWN := 12.0   # seconds between combo blasts, so the jar can still fill up
-const BLAST_BONUS := 2         # blasted piece points = merge_score(tier) * this
-const CHARGE_GOAL := 10.0      # charge needed for one bonus flip/shake
-const CHARGE_PER_MERGE := 1.0
-const CHARGE_PER_SEC := 0.2    # 50 s of survival = one bonus by time alone
+const BLAST_MIN_TIER := 4      # combos only shrink pieces at least this big (Pudding+)
+const BLAST_BONUS := 2         # shrink points = merge_score(tier) * this
 const SHAKE_ACCEL := 24.0      # m/s^2; a real shake easily passes 2.5 g, tilting never does
 const SHAKE_COOLDOWN := 1.5
 
 var mode := "free"
+var difficulty := "medium"
+var cfg: Dictionary = DIFFICULTY["medium"]
 var score := 0
-var flips_left := START_FLIPS
-var shakes_left := START_SHAKES
+var flips_left := 0
+var shakes_left := 0
 var flips_used := 0
 var shakes_used := 0
 var flipped := false
@@ -48,9 +56,8 @@ var drops := 0
 var merges := 0
 var best_tier := 0
 var run_time := 0.0
-var charge := 0.0
-var next_reward_is_flip := false
 var combo := 0
+var chain_from_drop := false  # flip/shake chains score, but only drop chains earn rewards and blasts
 var last_merge_time := -10.0
 var last_blast_time := -100.0
 var drop_cooldown := 0.0
@@ -87,10 +94,23 @@ var shown_score := 0
 @onready var copy_button: Button = $UI/GameOver/Box/Copy
 @onready var retry_button: Button = $UI/GameOver/Box/Retry
 @onready var menu_button: Button = $UI/GameOver/Box/Menu
+@onready var pause_button: Button = $UI/PauseButton
+@onready var pause_panel: Control = $UI/Pause
+@onready var pause_box: VBoxContainer = $UI/Pause/Box
+@onready var pause_info: Label = $UI/Pause/Box/Info
+@onready var resume_button: Button = $UI/Pause/Box/Resume
+@onready var restart_button: Button = $UI/Pause/Box/Restart
+@onready var pause_diff_label: Label = $UI/Pause/Box/DiffLabel
+@onready var pause_diff_box: HBoxContainer = $UI/Pause/Box/Difficulty
+@onready var quit_button: Button = $UI/Pause/Box/Menu
 
 
 func _ready() -> void:
 	mode = Save.mode
+	difficulty = "medium" if mode == "daily" else str(Save.data.get("difficulty", "medium"))
+	if not DIFFICULTY.has(difficulty):
+		difficulty = "medium"
+	cfg = DIFFICULTY[difficulty]
 	RenderingServer.set_default_clear_color(Tiers.background())
 	UiKit.style_tree($UI)
 	UiKit.candy(flip_button, "pink")
@@ -99,6 +119,10 @@ func _ready() -> void:
 	UiKit.candy(share_button, "green", false)
 	UiKit.candy(copy_button, "blue", false)
 	UiKit.candy(menu_button, "purple", false)
+	UiKit.candy(pause_button, "purple", false)
+	UiKit.candy(resume_button, "green", false)
+	UiKit.candy(restart_button, "orange", false)
+	UiKit.candy(quit_button, "red", false)
 	_style_charge_bar()
 	_build_jar()
 	flip_button.pressed.connect(_flip)
@@ -107,11 +131,17 @@ func _ready() -> void:
 	share_button.pressed.connect(_share_whatsapp)
 	copy_button.pressed.connect(_copy_result)
 	menu_button.pressed.connect(_go_menu)
+	pause_button.pressed.connect(_pause)
+	resume_button.pressed.connect(_resume)
+	restart_button.pressed.connect(_restart_from_pause.bind(""))
+	quit_button.pressed.connect(_quit_from_pause)
+	_build_pause_difficulty()
 	hint_label.modulate.a = 0.0
 	toast_label.modulate.a = 0.0
 	_start_run()
 	# Bubble the top bar in.
 	UiKit.pop_in(score_label, 0.0)
+	UiKit.pop_in(pause_button, 0.04)
 	UiKit.pop_in(flip_button, 0.08)
 	UiKit.pop_in(shake_button, 0.16)
 	UiKit.pop_in(charge_bar, 0.24)
@@ -124,9 +154,9 @@ func _style_charge_bar() -> void:
 	bg.border_color = Color(1, 1, 1, 0.45)
 	bg.set_border_width_all(2)
 	var fill := StyleBoxFlat.new()
-	fill.bg_color = UiKit.CANDY["yellow"]
+	fill.bg_color = UiKit.CANDY["pink"]
 	fill.set_corner_radius_all(14)
-	fill.shadow_color = Color(1, 0.85, 0.2, 0.6)
+	fill.shadow_color = Color(1, 0.3, 0.7, 0.6)
 	fill.shadow_size = 8
 	charge_bar.add_theme_stylebox_override("background", bg)
 	charge_bar.add_theme_stylebox_override("fill", fill)
@@ -134,7 +164,17 @@ func _style_charge_bar() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_go_menu()
+		# Back: close the pause menu, open it mid-run, or leave the result screen.
+		if is_paused():
+			_resume()
+		elif game_over:
+			_go_menu()
+		else:
+			_pause()
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		# Switching apps or taking a call pauses the run instead of letting the jar overflow.
+		if not game_over and is_inside_tree():
+			_pause()
 
 
 func _start_run() -> void:
@@ -145,8 +185,8 @@ func _start_run() -> void:
 	held = null
 	score = 0
 	shown_score = 0
-	flips_left = START_FLIPS
-	shakes_left = START_SHAKES
+	flips_left = int(cfg["flips"])
+	shakes_left = int(cfg["shakes"])
 	flips_used = 0
 	shakes_used = 0
 	flipped = false
@@ -155,8 +195,6 @@ func _start_run() -> void:
 	merges = 0
 	best_tier = 0
 	run_time = 0.0
-	charge = 0.0
-	next_reward_is_flip = false
 	combo = 0
 	last_merge_time = -10.0
 	last_blast_time = -100.0
@@ -171,12 +209,14 @@ func _start_run() -> void:
 	camera.rotation = 0.0
 	camera.offset = Vector2.ZERO
 	over_panel.visible = false
+	pause_panel.visible = false
+	pause_button.visible = true
 	if mode == "daily":
 		rng.seed = Save.daily_seed()
 		mode_label.text = "DAILY #%d  ·  try %d of %d" % [Save.day_number(), Save.DAILY_ATTEMPTS - Save.attempts_left() + 1, Save.DAILY_ATTEMPTS]
 	else:
 		rng.randomize()
-		mode_label.text = "FREE PLAY  ·  best %d" % int(Save.data["best_free"])
+		mode_label.text = "%s  ·  best %d" % [cfg["name"], Save.best_for(difficulty)]
 	next_tier = _roll_tier()
 	next_preview.set_tier(next_tier)
 	if not Save.data["first_run_done"]:
@@ -249,7 +289,8 @@ func _draw() -> void:
 
 
 func _danger_line_y() -> float:
-	return JAR_BOTTOM - DANGER_DEPTH if flipped else JAR_TOP + DANGER_DEPTH
+	var depth: float = cfg["danger"]
+	return JAR_BOTTOM - depth if flipped else JAR_TOP + depth
 
 
 func _spawn_y(r: float) -> float:
@@ -267,7 +308,7 @@ func _screen_up() -> Vector2:
 # --- Pieces ------------------------------------------------------------------
 
 func _roll_tier() -> int:
-	return rng.randi_range(0, SPAWN_TIERS - 1)
+	return rng.randi_range(0, int(cfg["spawn"]) - 1)
 
 
 func _make_piece(tier: int, pos: Vector2, pop := true) -> Piece:
@@ -308,8 +349,10 @@ func _drop() -> void:
 	held.freeze = false
 	held.sleeping = false
 	held = null
-	drop_cooldown = DROP_DELAY
+	drop_cooldown = cfg["drop_delay"]
 	drops += 1
+	combo = 0  # a combo is the chain of merges caused by a single drop
+	chain_from_drop = flip_grace <= 0.0  # drops while the jar is still tumbling don't count
 	if drops == 1:
 		_hide_hint()
 	if drops == FLIP_HINT_AFTER_DROPS and not Save.data["flip_hint_done"]:
@@ -352,7 +395,7 @@ func _merge(a: Piece, b: Piece) -> void:
 		color = Tiers.color(tier + 1)
 		r = Tiers.radius(tier + 1)
 		best_tier = maxi(best_tier, tier + 1)
-		if tier + 1 >= VANISH_TIER:
+		if tier + 1 >= int(cfg["vanish_tier"]):
 			_start_vanish(p)
 	else:
 		points += 100  # two Suns clear the jar space
@@ -363,14 +406,14 @@ func _merge(a: Piece, b: Piece) -> void:
 	Sfx.play("pop", clampf(1.7 - tier * 0.12, 0.6, 1.7) + fx_rng.randf_range(-0.04, 0.04))
 	shake = maxf(shake, 2.0 + tier * 1.2)
 	Save.vibrate(15 + tier * 4)
-	_add_charge(CHARGE_PER_MERGE)
 	_register_combo(mid)
 	_update_ui()
 
 
-## Two or more merges in quick succession = combo: blast the biggest piece(s) on the board.
+## Merges in quick succession build a combo: at reward_combo you earn a random flip or shake,
+## at blast_combo the biggest piece on the board is blasted away.
 func _register_combo(at: Vector2) -> void:
-	if run_time - last_merge_time <= COMBO_WINDOW:
+	if run_time - last_merge_time <= float(cfg["combo_window"]):
 		combo += 1
 	else:
 		combo = 1
@@ -381,23 +424,50 @@ func _register_combo(at: Vector2) -> void:
 	Fx.banner(banners, "COMBO x%d!" % combo, Color(colors[(combo - 2) % colors.size()]))
 	Fx.confetti(fx, at, 30.0)
 	Sfx.play("best", 1.0 + 0.1 * combo, -6.0)
-	if run_time - last_blast_time >= BLAST_COOLDOWN:
-		if _blast_biggest(1 if combo == 2 else 2) > 0:
+	UiKit.punch(charge_bar, 0.2)
+	if not chain_from_drop:
+		return
+	if combo == int(cfg["reward_combo"]):
+		_grant_reward()
+	if combo == int(cfg["blast_combo"]) and run_time - last_blast_time >= float(cfg["blast_cooldown"]):
+		if _shrink_biggest() > 0:
 			last_blast_time = run_time
 
 
-func _blast_biggest(count: int) -> int:
-	var list: Array[Piece] = []
+## A combo blast no longer deletes the biggest piece: it knocks it down one size,
+## so big pieces stay a real problem you have to merge away.
+func _shrink_biggest() -> int:
+	var biggest: Piece = null
 	for node in pieces.get_children():
 		var p := node as Piece
 		if p == null or p == held or p.merging or p.is_queued_for_deletion() or p.tier < BLAST_MIN_TIER:
 			continue
-		list.append(p)
-	list.sort_custom(func(x: Piece, y: Piece) -> bool: return x.tier > y.tier)
-	var n := mini(count, list.size())
-	for i in n:
-		_pop_piece(list[i], BLAST_BONUS, "BLAST")
-	return n
+		if biggest == null or p.tier > biggest.tier:
+			biggest = p
+	if biggest == null:
+		return 0
+	_shrink_piece(biggest)
+	return 1
+
+
+func _shrink_piece(p: Piece) -> void:
+	if game_over or not is_instance_valid(p):
+		return
+	var pts := Tiers.merge_score(p.tier) * BLAST_BONUS
+	var pos := p.position
+	var vel := p.linear_velocity
+	var c := Tiers.color(p.tier)
+	overflow_timers.erase(p.get_instance_id())
+	Fx.ring(fx, pos, Color.WHITE, p.radius)
+	Fx.burst(fx, pos, c, p.radius)
+	Fx.popup(fx, pos, "SHRINK +%d" % pts, Color(1, 0.95, 0.5), _screen_up(), camera.rotation, 46)
+	Sfx.play("pop", 0.7, 0.0)
+	shake = maxf(shake, 8.0)
+	Save.vibrate(45)
+	_add_score(pts)
+	p.queue_free()
+	var smaller := _make_piece(p.tier - 1, pos)
+	smaller.linear_velocity = vel
 
 
 ## Removes a piece with a big celebration and bonus points.
@@ -440,29 +510,21 @@ func _start_vanish(p: Piece) -> void:
 		_pop_piece(p, VANISH_BONUS, "MEGA"))
 
 
-# --- Bonus charge --------------------------------------------------------------
+# --- Combo reward --------------------------------------------------------------
 
-func _add_charge(amount: float) -> void:
-	charge += amount
-	while charge >= CHARGE_GOAL:
-		charge -= CHARGE_GOAL
-		_grant_reward()
-
-
+## Random +1 flip or +1 shake (whichever still has room).
 func _grant_reward() -> void:
-	var give_flip := next_reward_is_flip
+	var give_flip := fx_rng.randf() < 0.5
 	if give_flip and flips_left >= MAX_STOCK:
 		give_flip = false
 	elif not give_flip and shakes_left >= MAX_STOCK:
 		give_flip = true
 	if give_flip and flips_left < MAX_STOCK:
 		flips_left += 1
-		next_reward_is_flip = false
 		Fx.banner(banners, "+1 FLIP!", UiKit.CANDY["pink"], 300.0)
 		UiKit.punch(flip_button, 0.35)
 	elif shakes_left < MAX_STOCK:
 		shakes_left += 1
-		next_reward_is_flip = true
 		Fx.banner(banners, "+1 SHAKE!", UiKit.CANDY["teal"], 300.0)
 		UiKit.punch(shake_button, 0.35)
 	else:
@@ -479,6 +541,8 @@ func _flip() -> void:
 		return
 	flips_left -= 1
 	flips_used += 1
+	combo = 0
+	chain_from_drop = false
 	flipped = not flipped
 	flip_grace = FLIP_GRACE
 	overflow_timers.clear()
@@ -519,6 +583,8 @@ func _shake_jar() -> void:
 		return
 	shakes_left -= 1
 	shakes_used += 1
+	combo = 0
+	chain_from_drop = false
 	shake_cooldown = SHAKE_COOLDOWN
 	flip_grace = SHAKE_GRACE
 	overflow_timers.clear()
@@ -575,7 +641,11 @@ func _process(delta: float) -> void:
 	if shown_score != score:
 		shown_score = mini(score, shown_score + maxi(1, int((score - shown_score) * 0.2)))
 		score_label.text = str(shown_score)
-	charge_bar.value = lerpf(charge_bar.value, charge / CHARGE_GOAL, minf(1.0, delta * 8.0))
+	# Combo meter: fills toward the blast, drains when the chain breaks.
+	var live := run_time - last_merge_time <= float(cfg["combo_window"])
+	var target := float(combo) / float(cfg["blast_combo"]) if live else 0.0
+	charge_bar.value = lerpf(charge_bar.value, minf(target, 1.0), minf(1.0, delta * 10.0))
+	charge_label.text = "COMBO x%d" % combo if live and combo >= 2 else "COMBO"
 	queue_redraw()
 
 
@@ -583,7 +653,6 @@ func _physics_process(delta: float) -> void:
 	if game_over:
 		return
 	run_time += delta
-	_add_charge(CHARGE_PER_SEC * delta)
 	drop_cooldown -= delta
 	flip_grace -= delta
 	if held == null and drop_cooldown <= 0.0:
@@ -594,14 +663,25 @@ func _physics_process(delta: float) -> void:
 		var p := node as Piece
 		if p == null or p == held or p.merging:
 			continue
+		_rescue_if_escaped(p)
 		var id := p.get_instance_id()
 		if _in_danger(p) and p.linear_velocity.length() < SETTLED_SPEED:
 			overflow_timers[id] = overflow_timers.get(id, 0.0) + delta
-			if overflow_timers[id] >= OVERFLOW_TIME:
+			if overflow_timers[id] >= float(cfg["overflow"]):
 				_end_game()
 				return
 		else:
 			overflow_timers.erase(id)
+
+
+## Safety net: a piece that somehow ended up outside the jar is put back inside.
+func _rescue_if_escaped(p: Piece) -> void:
+	var pos := p.position
+	var r := p.radius
+	if pos.x > JAR_LEFT and pos.x < JAR_RIGHT and pos.y > JAR_TOP and pos.y < JAR_BOTTOM:
+		return
+	p.position = Vector2(clampf(pos.x, JAR_LEFT + r, JAR_RIGHT - r), clampf(pos.y, JAR_TOP + r, JAR_BOTTOM - r))
+	p.linear_velocity = Vector2.ZERO
 
 
 # --- Results -----------------------------------------------------------------
@@ -617,7 +697,7 @@ func _end_game() -> void:
 	Save.vibrate(120)
 	var res: Dictionary = Save.record_run(mode, score, {
 		"merges": merges, "best_tier": best_tier, "flips": flips_used,
-		"shakes": shakes_used, "secs": int(run_time)})
+		"shakes": shakes_used, "secs": int(run_time), "diff": difficulty})
 	if res["new_best"] and score > 0:
 		over_title.text = "NEW BEST!"
 		Sfx.play("best")
@@ -639,12 +719,13 @@ func _end_game() -> void:
 		result_text = "FLIP JAR  Day %d\nScore: %d\nFlips used: %d\nStreak: %d days\nCan you beat me? %s" % [
 			Save.day_number(), score, flips_used, Save.current_streak(), STORE_LINK]
 	else:
-		lines.append("Best  %d" % int(res["best"]))
+		lines.append("%s best  %d" % [cfg["name"].capitalize(), int(res["best"])])
 		retry_button.visible = true
 		retry_button.text = "PLAY AGAIN"
-		result_text = "FLIP JAR  Free Play\nScore: %d\nFlips used: %d\nCan you beat me? %s" % [
-			score, flips_used, STORE_LINK]
+		result_text = "FLIP JAR  Free Play (%s)\nScore: %d\nFlips used: %d\nCan you beat me? %s" % [
+			cfg["name"].capitalize(), score, flips_used, STORE_LINK]
 	over_stats.text = "\n".join(lines)
+	pause_button.visible = false
 	over_panel.visible = true
 	over_panel.modulate.a = 0.0
 	create_tween().tween_property(over_panel, "modulate:a", 1.0, 0.3)
@@ -671,7 +752,92 @@ func _on_retry() -> void:
 
 
 func _go_menu() -> void:
+	get_tree().paused = false
 	get_tree().change_scene_to_file("res://scenes/menu.tscn")
+
+
+# --- Pause -------------------------------------------------------------------
+
+func is_paused() -> bool:
+	return pause_panel.visible
+
+
+func _pause() -> void:
+	if game_over or is_paused():
+		return
+	Sfx.play("click")
+	get_tree().paused = true
+	if mode == "daily":
+		pause_info.text = "Score %d   ·   Daily #%d" % [score, Save.day_number()]
+		if drops > 0:
+			pause_info.text += "\nRestarting or quitting uses this try."
+	else:
+		pause_info.text = "Score %d   ·   %s" % [score, cfg["name"]]
+	pause_diff_label.visible = mode != "daily"
+	pause_diff_box.visible = mode != "daily"
+	pause_panel.visible = true
+	pause_panel.modulate.a = 0.0
+	pause_panel.create_tween().tween_property(pause_panel, "modulate:a", 1.0, 0.2)
+	var i := 0
+	for c in pause_box.get_children():
+		if c is Control and c.visible:
+			UiKit.pop_in(c, 0.05 + i * 0.05)
+			i += 1
+
+
+func _resume() -> void:
+	if not is_paused():
+		return
+	Sfx.play("click")
+	pause_panel.visible = false
+	get_tree().paused = false
+
+
+## One button per difficulty: starts a fresh free-play run on that difficulty.
+func _build_pause_difficulty() -> void:
+	var colors := {"easy": "green", "medium": "orange", "hard": "red"}
+	for key in ["easy", "medium", "hard"]:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 76)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 26)
+		b.text = ("✓ " if key == difficulty else "") + key.to_upper()
+		UiKit.candy(b, colors[key], false)
+		b.pressed.connect(_restart_from_pause.bind(key))
+		pause_diff_box.add_child(b)
+
+
+## Ends the current run (it still counts if anything was dropped) and starts a new one,
+## optionally on another difficulty.
+func _restart_from_pause(new_difficulty: String) -> void:
+	Sfx.play("click")
+	_abandon_run()
+	get_tree().paused = false
+	if mode == "daily" and Save.attempts_left() <= 0:
+		_go_menu()
+		return
+	if new_difficulty != "" and new_difficulty != difficulty:
+		Save.data["difficulty"] = new_difficulty
+		Save.save()
+		get_tree().reload_current_scene()
+		return
+	_start_run()
+
+
+func _quit_from_pause() -> void:
+	Sfx.play("click")
+	_abandon_run()
+	_go_menu()
+
+
+## Saves a run that was quit midway, so daily tries can't be dodged and free-play bests aren't lost.
+func _abandon_run() -> void:
+	if game_over or drops == 0:
+		return
+	game_over = true
+	Save.record_run(mode, score, {
+		"merges": merges, "best_tier": best_tier, "flips": flips_used,
+		"shakes": shakes_used, "secs": int(run_time), "diff": difficulty})
 
 
 func _share_whatsapp() -> void:

@@ -62,6 +62,14 @@ vertical_alignment = 1
 position = Vector2(625, 84)
 script = ExtResource("2_preview")
 
+[node name="PauseButton" type="Button" parent="UI"]
+offset_left = 446.0
+offset_top = 18.0
+offset_right = 540.0
+offset_bottom = 88.0
+theme_override_font_sizes/font_size = 34
+text = "II"
+
 [node name="FlipButton" type="Button" parent="UI"]
 offset_left = 24.0
 offset_top = 132.0
@@ -194,3 +202,75 @@ custom_minimum_size = Vector2(0, 84)
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "MENU"
+
+[node name="Pause" type="Panel" parent="UI"]
+process_mode = 3
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("panel_bg")
+
+[node name="Box" type="VBoxContainer" parent="UI/Pause"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -290.0
+offset_top = -440.0
+offset_right = 290.0
+offset_bottom = 440.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Title" type="Label" parent="UI/Pause/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.86, 0.3, 1)
+theme_override_constants/outline_size = 14
+theme_override_font_sizes/font_size = 64
+text = "PAUSED"
+horizontal_alignment = 1
+
+[node name="Info" type="Label" parent="UI/Pause/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.92, 1, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 24
+text = "Score 0"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Resume" type="Button" parent="UI/Pause/Box"]
+custom_minimum_size = Vector2(0, 104)
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "RESUME"
+
+[node name="Restart" type="Button" parent="UI/Pause/Box"]
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "RESTART"
+
+[node name="DiffLabel" type="Label" parent="UI/Pause/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.92, 1, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 22
+text = "NEW GAME ON"
+horizontal_alignment = 1
+
+[node name="Difficulty" type="HBoxContainer" parent="UI/Pause/Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Menu" type="Button" parent="UI/Pause/Box"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "QUIT TO MENU"
