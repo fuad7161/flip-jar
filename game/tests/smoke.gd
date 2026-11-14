@@ -34,7 +34,7 @@ func _run() -> void:
 	var menu: Node = load("res://scenes/menu.tscn").instantiate()
 	root.add_child(menu)
 	await process_frame
-	_check(menu.get_node("UI/Box/Themes").get_child_count() == 3, "menu should list 3 themes")
+	_check(menu.theme_buttons.size() == 3, "menu should list 3 themes")
 	menu.queue_free()
 	await process_frame
 
@@ -53,12 +53,13 @@ func _run() -> void:
 	await process_frame
 	_check(main.mode == "daily", "game should start in the mode chosen on the menu")
 	_check(root.get_node("Sfx").music.stream != null, "background music should be loaded")
-	_check(root.get_node("Sfx").music.playing, "background music should be playing")
+	# Headless runs use the dummy audio driver, where nothing ever reports as playing.
+	_check(root.get_node("Sfx").music.playing or AudioServer.get_driver_name() == "Dummy", "background music should be playing")
 
 	# Pause before anything is dropped: it must freeze the game and not use a daily try.
 	main._pause()
 	_check(paused and main.pause_panel.visible, "pause should freeze the tree and show the menu")
-	_check(not main.pause_diff_box.visible, "daily runs can't switch difficulty")
+	_check(not main.pause_levels_button.visible, "daily runs don't show the levels button")
 	main._resume()
 	_check(not paused and not main.pause_panel.visible, "resume should unfreeze the game")
 	main._pause()
@@ -159,19 +160,19 @@ func _run() -> void:
 	_check(5 in tiers and not (6 in tiers), "shrink should leave a piece one size smaller")
 	_check(main.cfg["vanish_tier"] == 10, "only Suns should vanish")
 
-	# Quitting a free-play run midway still saves it to history.
-	main.mode = "free"
+	# Quitting a level run midway still saves it to history.
+	main.mode = "level"
 	main.drops = 3
 	main.score = 77
 	var hist_before: int = save.data["history"].size()
 	main._abandon_run()
 	_check(save.data["history"].size() == hist_before + 1 and int(save.data["history"][0]["score"]) == 77, "a quit run should be saved")
-	_check(save.attempts_left() == 2, "quitting free play must not use daily attempts")
+	_check(save.attempts_left() == 2, "quitting a level must not use daily attempts")
+	_check(save.unlocked_level() == 1, "a quit level run must not unlock anything")
+	main.queue_free()
+	await process_frame
 
-	# Free mode records its own best.
-	var res: Dictionary = save.record_run("free", 123)
-	_check(res["new_best"] and int(save.data["best_free"]) == 123, "free run should set best_free")
-	_check(save.attempts_left() == 2, "free runs must not use daily attempts")
+	await _test_levels(save)
 
 	if failures.is_empty():
 		print("SMOKE OK")
@@ -179,3 +180,82 @@ func _run() -> void:
 	else:
 		print("SMOKE FAILED (%d)" % failures.size())
 		quit(1)
+
+
+func _test_levels(save: Node) -> void:
+	# Level data: level 1 is 200 points in 200 s, and every level asks for more per second.
+	var c1 := Levels.config(1)
+	_check(int(c1["target"]) == 200 and int(c1["time"]) == 200, "level 1 should be 200 points in 200 s")
+	var prev_rate := 0.0
+	for n in range(1, Levels.COUNT + 1):
+		var c := Levels.config(n)
+		var rate := float(c["target"]) / float(c["time"])
+		_check(rate > prev_rate, "level %d should need more points per second than level %d" % [n, n - 1])
+		prev_rate = rate
+	_check(Levels.stars_for(100.0, 200.0) == 3 and Levels.stars_for(140.0, 200.0) == 2 and Levels.stars_for(190.0, 200.0) == 1,
+		"stars: half time = 3, three quarters = 2, slower = 1")
+
+	# Winning level 1 shows stars, unlocks level 2 and saves the best time.
+	save.mode = "level"
+	save.level = 1
+	var g: Node = load("res://scenes/game.tscn").instantiate()
+	root.add_child(g)
+	await physics_frame
+	_check(g.level == 1 and g.target == 200 and g.level_bar.visible, "level 1 should load with its goal and clock")
+	g.run_time = 90.0
+	g.score = 200
+	await physics_frame
+	await physics_frame
+	_check(g.game_over and g.won, "reaching the goal should win the level")
+	_check(g.star_row.visible and g.star_row.earned == 3, "a fast clear should earn 3 stars")
+	_check(g.next_button.visible, "a cleared level should offer NEXT")
+	_check(save.unlocked_level() == 2, "clearing level 1 should unlock level 2")
+	_check(int(save.level_info(1)["stars"]) == 3, "level 1 stars should be saved")
+
+	# A slower replay must not lower the saved stars or best time.
+	g._start_run()
+	await physics_frame
+	g.run_time = 170.0
+	g.score = 250
+	await physics_frame
+	await physics_frame
+	_check(g.won and g.star_row.earned == 1, "a slow clear should earn 1 star")
+	_check(int(save.level_info(1)["stars"]) == 3 and float(save.level_info(1)["secs"]) <= 90.1,
+		"replays keep the most stars and the fastest time")
+
+	# Running out of time loses.
+	g._start_run()
+	await physics_frame
+	g.run_time = 199.99
+	g.score = 150
+	for i in 5:
+		await physics_frame
+	_check(g.game_over and not g.won, "the clock running out should fail the level")
+	_check(g.over_title.text == "Time's up!", "time out should say so")
+	_check(save.unlocked_level() == 2, "a failed level must not unlock more")
+	var hist: Array = save.data["history"]
+	_check(hist[0]["mode"] == "level" and not hist[0]["won"], "a failed level should be in history")
+	g.queue_free()
+	await process_frame
+
+	# Level select: one tile per level, with only cleared + next levels open.
+	var ls: Node = load("res://scenes/levels.tscn").instantiate()
+	root.add_child(ls)
+	await process_frame
+	var tiles: Array = ls.grid.get_children()
+	_check(tiles.size() == Levels.COUNT, "level select should list every level")
+	_check(not tiles[0].disabled and not tiles[1].disabled and tiles[2].disabled, "only cleared and next levels are open")
+	_check(tiles[0].stars == 3, "level tile should show the best stars")
+	ls.queue_free()
+	await process_frame
+
+	# Old saves with difficulty keys still load.
+	save.data["best_diff"] = {"easy": 5}
+	save.data["difficulty"] = "hard"
+	var menu: Node = load("res://scenes/menu.tscn").instantiate()
+	root.add_child(menu)
+	await process_frame
+	_check(menu.play_button.caption == "LEVEL 2", "menu should offer the next open level")
+	menu.queue_free()
+	await process_frame
+

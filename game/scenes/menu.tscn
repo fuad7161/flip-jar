@@ -24,18 +24,12 @@ text = "Player"
 alignment = 0
 
 [node name="Box" type="VBoxContainer" parent="UI"]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -300.0
-offset_top = -500.0
-offset_right = 300.0
-offset_bottom = 560.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 14
+offset_left = 24.0
+offset_top = 120.0
+offset_right = 696.0
+offset_bottom = 1240.0
+theme_override_constants/separation = 18
+alignment = 1
 
 [node name="Title" type="HBoxContainer" parent="UI/Box"]
 custom_minimum_size = Vector2(0, 140)
@@ -51,83 +45,5 @@ text = "Drop. Merge. Flip. Shake!"
 horizontal_alignment = 1
 
 [node name="Spacer" type="Control" parent="UI/Box"]
-custom_minimum_size = Vector2(0, 120)
+custom_minimum_size = Vector2(0, 130)
 layout_mode = 2
-
-[node name="Daily" type="Button" parent="UI/Box"]
-custom_minimum_size = Vector2(0, 116)
-layout_mode = 2
-theme_override_font_sizes/font_size = 46
-text = "DAILY  #1"
-
-[node name="DailyInfo" type="Label" parent="UI/Box"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.92, 1, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 22
-text = "3 of 3 tries left"
-horizontal_alignment = 1
-
-[node name="Difficulty" type="HBoxContainer" parent="UI/Box"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="Free" type="Button" parent="UI/Box"]
-custom_minimum_size = Vector2(0, 116)
-layout_mode = 2
-theme_override_font_sizes/font_size = 46
-text = "FREE PLAY"
-
-[node name="FreeInfo" type="Label" parent="UI/Box"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.92, 1, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 22
-text = "best 0"
-horizontal_alignment = 1
-
-[node name="Streak" type="Label" parent="UI/Box"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.9, 0.45, 1)
-theme_override_font_sizes/font_size = 26
-text = "Play the daily jar to start a streak"
-horizontal_alignment = 1
-
-[node name="Spacer2" type="Control" parent="UI/Box"]
-custom_minimum_size = Vector2(0, 10)
-layout_mode = 2
-
-[node name="ThemeLabel" type="Label" parent="UI/Box"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.92, 1, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 22
-text = "THEMES  (unlock with daily streaks)"
-horizontal_alignment = 1
-
-[node name="Themes" type="HBoxContainer" parent="UI/Box"]
-layout_mode = 2
-theme_override_constants/separation = 12
-
-[node name="Settings" type="HBoxContainer" parent="UI/Box"]
-layout_mode = 2
-alignment = 1
-theme_override_constants/separation = 16
-
-[node name="Sound" type="CheckButton" parent="UI/Box/Settings"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 26
-button_pressed = true
-text = "Sound"
-
-[node name="Music" type="CheckButton" parent="UI/Box/Settings"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 26
-button_pressed = true
-text = "Music"
-
-[node name="Vibrate" type="CheckButton" parent="UI/Box/Settings"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 26
-button_pressed = true
-text = "Vibration"

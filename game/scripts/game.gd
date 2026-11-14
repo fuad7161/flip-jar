@@ -13,26 +13,7 @@ const SETTLED_SPEED := 40.0
 const FLIP_HINT_AFTER_DROPS := 6
 const STORE_LINK := "https://play.google.com/store/apps/details?id=com.flipjar.game"
 
-# --- Tuning (rough first numbers; tweak freely) ---
-## Per-difficulty settings. Daily always uses "medium" so everyone plays the same jar.
-##   flips/shakes   what you start with
-##   spawn          how many of the smallest tiers can be dropped (more = messier jar)
-##   drop_delay     seconds before the next piece appears
-##   danger         depth of the overflow zone from the drop side (px)
-##   overflow       seconds a piece may rest in the danger zone before game over
-##   combo_window   max seconds between merges of one chain (a new drop also ends the chain)
-##   reward_combo   merges in a row that earn a random +1 flip or +1 shake
-##   blast_combo    merges in a row that shrink the biggest piece by one size
-##   blast_cooldown seconds between blasts
-##   vanish_tier    a piece of this tier pops by itself (10 = Sun, the biggest; only Suns vanish now)
-const DIFFICULTY := {
-	"easy": {"name": "EASY", "flips": 3, "shakes": 2, "spawn": 4, "drop_delay": 0.6, "danger": 140.0,
-		"overflow": 1.5, "combo_window": 0.9, "reward_combo": 3, "blast_combo": 4, "blast_cooldown": 8.0, "vanish_tier": 10},
-	"medium": {"name": "MEDIUM", "flips": 2, "shakes": 1, "spawn": 5, "drop_delay": 0.55, "danger": 150.0,
-		"overflow": 1.0, "combo_window": 0.7, "reward_combo": 3, "blast_combo": 4, "blast_cooldown": 15.0, "vanish_tier": 10},
-	"hard": {"name": "HARD", "flips": 1, "shakes": 1, "spawn": 5, "drop_delay": 0.45, "danger": 180.0,
-		"overflow": 0.8, "combo_window": 0.5, "reward_combo": 4, "blast_combo": 5, "blast_cooldown": 25.0, "vanish_tier": 10},
-}
+# Tuning lives in levels.gd: Levels.config(n) for each level and Levels.DAILY for the daily jar.
 const VANISH_DELAY := 1.2
 const VANISH_BONUS := 3        # vanish points = merge_score(tier) * this
 const BLAST_MIN_TIER := 4      # combos only shrink pieces at least this big (Pudding+)
@@ -40,9 +21,13 @@ const BLAST_BONUS := 2         # shrink points = merge_score(tier) * this
 const SHAKE_ACCEL := 24.0      # m/s^2; a real shake easily passes 2.5 g, tilting never does
 const SHAKE_COOLDOWN := 1.5
 
-var mode := "free"
-var difficulty := "medium"
-var cfg: Dictionary = DIFFICULTY["medium"]
+var mode := "level"
+var level := 1
+var cfg: Dictionary = Levels.DAILY
+var target := 0          # level goal score (0 in daily mode)
+var time_limit := 0.0    # level clock in seconds (0 in daily mode)
+var won := false
+var last_tick := -1      # last whole second announced by the final countdown
 var score := 0
 var flips_left := 0
 var shakes_left := 0
@@ -70,6 +55,7 @@ var rng := RandomNumberGenerator.new()
 var fx_rng := RandomNumberGenerator.new()
 var flip_tween: Tween = null
 var pulse_tween: Tween = null
+var hint_tween: Tween = null
 var result_text := ""
 var shown_score := 0
 
@@ -90,52 +76,51 @@ var shown_score := 0
 @onready var over_box: VBoxContainer = $UI/GameOver/Box
 @onready var over_title: Label = $UI/GameOver/Box/Title
 @onready var over_stats: Label = $UI/GameOver/Box/Stats
-@onready var share_button: Button = $UI/GameOver/Box/Share
-@onready var copy_button: Button = $UI/GameOver/Box/Copy
-@onready var retry_button: Button = $UI/GameOver/Box/Retry
-@onready var menu_button: Button = $UI/GameOver/Box/Menu
 @onready var pause_button: Button = $UI/PauseButton
 @onready var pause_panel: Control = $UI/Pause
 @onready var pause_box: VBoxContainer = $UI/Pause/Box
 @onready var pause_info: Label = $UI/Pause/Box/Info
-@onready var resume_button: Button = $UI/Pause/Box/Resume
-@onready var restart_button: Button = $UI/Pause/Box/Restart
-@onready var pause_diff_label: Label = $UI/Pause/Box/DiffLabel
-@onready var pause_diff_box: HBoxContainer = $UI/Pause/Box/Difficulty
-@onready var quit_button: Button = $UI/Pause/Box/Menu
+@onready var level_bar: LevelBar = $UI/LevelBar
+var star_row: StarRow
+# Result and pause actions: icon buttons in group cards, built in code.
+var next_button: IconButton
+var retry_button: IconButton
+var over_levels_button: IconButton
+var menu_button: IconButton
+var share_button: IconButton
+var copy_button: IconButton
+var over_groups: Array[Control] = []
+var resume_button: IconButton
+var restart_button: IconButton
+var pause_levels_button: IconButton
+var quit_button: IconButton
+var pause_groups: Array[Control] = []
 
 
 func _ready() -> void:
 	mode = Save.mode
-	difficulty = "medium" if mode == "daily" else str(Save.data.get("difficulty", "medium"))
-	if not DIFFICULTY.has(difficulty):
-		difficulty = "medium"
-	cfg = DIFFICULTY[difficulty]
+	if mode == "level":
+		level = clampi(Save.level, 1, Save.unlocked_level())
+		cfg = Levels.config(level)
+		target = int(cfg["target"])
+		time_limit = float(cfg["time"])
+	else:
+		cfg = Levels.DAILY
+	_build_result_extras()
+	_build_pause_actions()
 	RenderingServer.set_default_clear_color(Tiers.background())
 	UiKit.style_tree($UI)
 	UiKit.candy(flip_button, "pink")
 	UiKit.candy(shake_button, "teal")
-	UiKit.candy(retry_button, "orange", false)
-	UiKit.candy(share_button, "green", false)
-	UiKit.candy(copy_button, "blue", false)
-	UiKit.candy(menu_button, "purple", false)
 	UiKit.candy(pause_button, "purple", false)
-	UiKit.candy(resume_button, "green", false)
-	UiKit.candy(restart_button, "orange", false)
-	UiKit.candy(quit_button, "red", false)
 	_style_charge_bar()
 	_build_jar()
 	flip_button.pressed.connect(_flip)
 	shake_button.pressed.connect(_shake_jar)
-	retry_button.pressed.connect(_on_retry)
-	share_button.pressed.connect(_share_whatsapp)
-	copy_button.pressed.connect(_copy_result)
-	menu_button.pressed.connect(_go_menu)
 	pause_button.pressed.connect(_pause)
-	resume_button.pressed.connect(_resume)
-	restart_button.pressed.connect(_restart_from_pause.bind(""))
-	quit_button.pressed.connect(_quit_from_pause)
-	_build_pause_difficulty()
+	level_bar.visible = mode == "level"
+	if mode == "level":
+		score_label.add_theme_font_size_override("font_size", 54)
 	hint_label.modulate.a = 0.0
 	toast_label.modulate.a = 0.0
 	_start_run()
@@ -195,6 +180,8 @@ func _start_run() -> void:
 	merges = 0
 	best_tier = 0
 	run_time = 0.0
+	won = false
+	last_tick = -1
 	combo = 0
 	last_merge_time = -10.0
 	last_blast_time = -100.0
@@ -216,10 +203,17 @@ func _start_run() -> void:
 		mode_label.text = "DAILY #%d  ·  try %d of %d" % [Save.day_number(), Save.DAILY_ATTEMPTS - Save.attempts_left() + 1, Save.DAILY_ATTEMPTS]
 	else:
 		rng.randomize()
-		mode_label.text = "%s  ·  best %d" % [cfg["name"], Save.best_for(difficulty)]
+		level_bar.reset(time_limit, target)
+		score_label.text = "LEVEL %d" % level
+		mode_label.text = "Fill GOAL before TIME runs out"
+		Fx.banner(banners, "LEVEL %d" % level, UiKit.CANDY["yellow"], 470.0)
+		var goal_text := "Fill the GOAL bar\nbefore the TIME bar runs out!"
+		if not Save.data["first_run_done"]:
+			goal_text += "\nDrag to aim, release to drop"
+		_show_hint(goal_text)
 	next_tier = _roll_tier()
 	next_preview.set_tier(next_tier)
-	if not Save.data["first_run_done"]:
+	if not Save.data["first_run_done"] and mode == "daily":
 		_show_hint("Drag to aim, release to drop")
 	_update_ui()
 	queue_redraw()
@@ -377,6 +371,9 @@ func _on_merge_requested(a: Piece, b: Piece) -> void:
 
 func _merge(a: Piece, b: Piece) -> void:
 	if game_over or not (is_instance_valid(a) and is_instance_valid(b)):
+		return
+	# A restart in the same frame queues every old piece for deletion; don't merge leftovers.
+	if a.is_queued_for_deletion() or b.is_queued_for_deletion():
 		return
 	var tier := a.tier
 	var mid := (a.position + b.position) / 2.0
@@ -638,7 +635,7 @@ func _process(delta: float) -> void:
 		if a.length() > SHAKE_ACCEL:
 			_shake_jar()
 	# Score rolls up instead of jumping.
-	if shown_score != score:
+	if shown_score != score and mode != "level":
 		shown_score = mini(score, shown_score + maxi(1, int((score - shown_score) * 0.2)))
 		score_label.text = str(shown_score)
 	# Combo meter: fills toward the blast, drains when the chain breaks.
@@ -646,6 +643,13 @@ func _process(delta: float) -> void:
 	var target := float(combo) / float(cfg["blast_combo"]) if live else 0.0
 	charge_bar.value = lerpf(charge_bar.value, minf(target, 1.0), minf(1.0, delta * 10.0))
 	charge_label.text = "COMBO x%d" % combo if live and combo >= 2 else "COMBO"
+	if mode == "level" and not game_over:
+		level_bar.used = run_time
+		level_bar.set_score(score)
+		var left := int(ceil(time_limit - run_time))
+		if left <= 10 and left != last_tick and left > 0:
+			last_tick = left
+			Sfx.play("click", 1.6 if left > 3 else 2.0, -4.0)
 	queue_redraw()
 
 
@@ -655,6 +659,13 @@ func _physics_process(delta: float) -> void:
 	run_time += delta
 	drop_cooldown -= delta
 	flip_grace -= delta
+	if mode == "level":
+		if score >= target:
+			_end_game("win")
+			return
+		if run_time >= time_limit:
+			_end_game("time")
+			return
 	if held == null and drop_cooldown <= 0.0:
 		_spawn_held()
 	if flip_grace > 0.0:
@@ -668,7 +679,7 @@ func _physics_process(delta: float) -> void:
 		if _in_danger(p) and p.linear_velocity.length() < SETTLED_SPEED:
 			overflow_timers[id] = overflow_timers.get(id, 0.0) + delta
 			if overflow_timers[id] >= float(cfg["overflow"]):
-				_end_game()
+				_end_game("overflow")
 				return
 		else:
 			overflow_timers.erase(id)
@@ -686,45 +697,84 @@ func _rescue_if_escaped(p: Piece) -> void:
 
 # --- Results -----------------------------------------------------------------
 
-func _end_game() -> void:
+## Ends the run. `reason` is "win" (level goal reached), "time" (level clock ran out) or "overflow".
+func _end_game(reason := "overflow") -> void:
 	game_over = true
+	won = reason == "win"
 	if held != null:
 		held.queue_free()
 		held = null
 	_stop_pulse()
-	_hide_hint()
-	shake = 14.0
-	Save.vibrate(120)
-	var res: Dictionary = Save.record_run(mode, score, {
-		"merges": merges, "best_tier": best_tier, "flips": flips_used,
-		"shakes": shakes_used, "secs": int(run_time), "diff": difficulty})
-	if res["new_best"] and score > 0:
-		over_title.text = "NEW BEST!"
-		Sfx.play("best")
+	_fade_hint(0.0, 0.0)
+	shake = 4.0 if won else 14.0
+	Save.vibrate(60 if won else 120)
+	var secs := minf(run_time, time_limit) if mode == "level" else run_time
+	var stars := Levels.stars_for(secs, time_limit) if won else 0
+	var prev: Dictionary = Save.level_info(level).duplicate() if mode == "level" else {}
+	var res: Dictionary = Save.record_run(mode, score, _run_stats(stars))
+	star_row.visible = mode == "level" and won
+	next_button.visible = false
+	over_levels_button.visible = mode == "level"
+	share_button.visible = mode == "daily" or won
+	copy_button.visible = share_button.visible
+	var lines := []
+	if mode == "level":
+		if won:
+			over_title.text = "LEVEL %d CLEAR!" % level
+			star_row.set_stars(stars, true)
+			Sfx.play("best")
+			Fx.confetti(fx, camera.get_screen_center_position(), 120.0)
+			lines.append("Time  %s  /  %s" % [Levels.fmt_time(secs), Levels.fmt_clock(time_limit)])
+			if prev.is_empty():
+				lines.append("First clear!")
+			elif res["new_best"]:
+				lines.append("NEW BEST TIME!  (was %s)" % Levels.fmt_time(float(prev["secs"])))
+			else:
+				lines.append("Best  %s" % Levels.fmt_time(float(prev["secs"])))
+			if stars < 3:
+				var need := Levels.THREE_STAR if stars == 2 else Levels.TWO_STAR
+				lines.append("Finish in %s for %d stars" % [Levels.fmt_time(time_limit * need), stars + 1])
+			if level < Levels.COUNT:
+				next_button.visible = true
+				next_button.sub = "Level %d" % (level + 1)
+			retry_button.caption = "REPLAY"
+			retry_button.sub = ""
+			result_text = "FLIP JAR  Level %d\n%s  in %s\nCan you beat me? %s" % [
+				level, "★".repeat(stars) + "☆".repeat(3 - stars), Levels.fmt_time(secs), STORE_LINK]
+		else:
+			over_title.text = "Time's up!" if reason == "time" else "Jar overflowed!"
+			Sfx.play("over")
+			lines.append("Score  %d  /  %d" % [score, target])
+			lines.append("%d more points to go" % maxi(target - score, 0))
+			if not prev.is_empty():
+				lines.append("Best  %s   %s" % [Levels.fmt_time(float(prev["secs"])), "★".repeat(int(prev["stars"]))])
+			retry_button.caption = "RETRY"
+			retry_button.sub = ""
+		retry_button.visible = true
 	else:
-		over_title.text = "Jar overflowed!"
-		Sfx.play("over")
-	var lines := [
-		"Score  %d" % score,
-		"Merges  %d   ·   Biggest  %s" % [merges, Tiers.tier_name(best_tier)],
-		"Flips  %d   ·   Shakes  %d" % [flips_used, shakes_used],
-		"Time  %s" % _fmt_time(int(run_time)),
-	]
-	if mode == "daily":
+		if res["new_best"] and score > 0:
+			over_title.text = "NEW BEST!"
+			Sfx.play("best")
+			Fx.confetti(fx, camera.get_screen_center_position(), 120.0)
+		else:
+			over_title.text = "Jar overflowed!"
+			Sfx.play("over")
+		lines.append("Score  %d" % score)
+		lines.append("Merges  %d   ·   Biggest  %s" % [merges, Tiers.tier_name(best_tier)])
+		lines.append("Flips  %d   ·   Shakes  %d" % [flips_used, shakes_used])
+		lines.append("Time  %s" % _fmt_time(int(run_time)))
 		lines.append("Today's best  %d" % int(res["best"]))
 		lines.append("Streak  %d day%s" % [Save.current_streak(), "" if Save.current_streak() == 1 else "s"])
 		var left := Save.attempts_left()
 		retry_button.visible = left > 0
-		retry_button.text = "TRY AGAIN  (%d left)" % left
+		retry_button.caption = "RETRY"
+		retry_button.sub = "%d left" % left
 		result_text = "FLIP JAR  Day %d\nScore: %d\nFlips used: %d\nStreak: %d days\nCan you beat me? %s" % [
 			Save.day_number(), score, flips_used, Save.current_streak(), STORE_LINK]
-	else:
-		lines.append("%s best  %d" % [cfg["name"].capitalize(), int(res["best"])])
-		retry_button.visible = true
-		retry_button.text = "PLAY AGAIN"
-		result_text = "FLIP JAR  Free Play (%s)\nScore: %d\nFlips used: %d\nCan you beat me? %s" % [
-			cfg["name"].capitalize(), score, flips_used, STORE_LINK]
 	over_stats.text = "\n".join(lines)
+	menu_button.visible = true
+	for g in over_groups:
+		UiKit.sync_group(g)
 	pause_button.visible = false
 	over_panel.visible = true
 	over_panel.modulate.a = 0.0
@@ -734,9 +784,66 @@ func _end_game() -> void:
 		if c is Control and c.visible:
 			UiKit.pop_in(c, 0.15 + i * 0.08)
 			i += 1
-	if res["new_best"] and score > 0:
-		Fx.confetti(fx, camera.get_screen_center_position(), 120.0)
 	_update_ui()
+
+
+func _run_stats(stars := 0) -> Dictionary:
+	return {"merges": merges, "best_tier": best_tier, "flips": flips_used, "shakes": shakes_used,
+		"secs": int(run_time), "level": level if mode == "level" else 0, "won": won, "stars": stars,
+		"time": minf(run_time, time_limit) if mode == "level" else run_time}
+
+
+## Star row and the action cards on the result screen:
+##   PLAY (next / retry)   GO TO (levels / home)   SHARE (WhatsApp / copy)
+func _build_result_extras() -> void:
+	star_row = StarRow.new()
+	star_row.custom_minimum_size = Vector2(0, 130)
+	over_box.add_child(star_row)
+	over_box.move_child(star_row, over_title.get_index() + 1)
+	next_button = IconButton.make("next", "NEXT", "orange")
+	retry_button = IconButton.make("replay", "RETRY", "green")
+	over_levels_button = IconButton.make("grid", "LEVELS", "blue")
+	menu_button = IconButton.make("home", "HOME", "purple")
+	share_button = IconButton.make("share", "SHARE", "green")
+	copy_button = IconButton.make("copy", "COPY", "blue")
+	next_button.pressed.connect(_on_next)
+	retry_button.pressed.connect(_on_retry)
+	over_levels_button.pressed.connect(_go_levels)
+	menu_button.pressed.connect(_go_menu)
+	share_button.pressed.connect(_share_whatsapp)
+	copy_button.pressed.connect(_copy_result)
+	over_groups = [
+		UiKit.group("PLAY", [next_button, retry_button], Color(1, 0.6, 0.2, 0.16)),
+		UiKit.group("GO TO", [over_levels_button, menu_button], Color(0.3, 0.6, 1, 0.16)),
+		UiKit.group("SHARE", [share_button, copy_button], Color(0.3, 1, 0.5, 0.14)),
+	]
+	over_box.add_child(_group_row(over_groups))
+
+
+## The pause screen: GAME (resume / restart) and GO TO (levels / home) side by side.
+func _build_pause_actions() -> void:
+	resume_button = IconButton.make("play", "RESUME", "green", 130.0)
+	restart_button = IconButton.make("replay", "RESTART", "orange", 130.0)
+	pause_levels_button = IconButton.make("grid", "LEVELS", "blue", 130.0)
+	quit_button = IconButton.make("home", "HOME", "purple", 130.0)
+	resume_button.pressed.connect(_resume)
+	restart_button.pressed.connect(_restart_from_pause.bind(""))
+	pause_levels_button.pressed.connect(_levels_from_pause)
+	quit_button.pressed.connect(_quit_from_pause)
+	pause_groups = [
+		UiKit.group("GAME", [resume_button, restart_button], Color(0.3, 1, 0.5, 0.14)),
+		UiKit.group("GO TO", [pause_levels_button, quit_button], Color(0.3, 0.6, 1, 0.16)),
+	]
+	pause_box.add_child(_group_row(pause_groups))
+
+
+func _group_row(groups: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	for g in groups:
+		row.add_child(g)
+	return row
 
 
 static func _fmt_time(secs: int) -> String:
@@ -749,6 +856,18 @@ func _on_retry() -> void:
 		_go_menu()
 		return
 	_start_run()
+
+
+func _on_next() -> void:
+	Sfx.play("click")
+	Save.level = mini(level + 1, Levels.COUNT)
+	get_tree().reload_current_scene()
+
+
+func _go_levels() -> void:
+	Sfx.play("click")
+	get_tree().paused = false
+	get_tree().change_scene_to_file("res://scenes/levels.tscn")
 
 
 func _go_menu() -> void:
@@ -772,9 +891,10 @@ func _pause() -> void:
 		if drops > 0:
 			pause_info.text += "\nRestarting or quitting uses this try."
 	else:
-		pause_info.text = "Score %d   ·   %s" % [score, cfg["name"]]
-	pause_diff_label.visible = mode != "daily"
-	pause_diff_box.visible = mode != "daily"
+		pause_info.text = "Level %d   ·   goal %d%% done" % [level, int(100.0 * minf(1.0, float(score) / target))]
+	pause_levels_button.visible = mode == "level"
+	for g in pause_groups:
+		UiKit.sync_group(g)
 	pause_panel.visible = true
 	pause_panel.modulate.a = 0.0
 	pause_panel.create_tween().tween_property(pause_panel, "modulate:a", 1.0, 0.2)
@@ -793,35 +913,20 @@ func _resume() -> void:
 	get_tree().paused = false
 
 
-## One button per difficulty: starts a fresh free-play run on that difficulty.
-func _build_pause_difficulty() -> void:
-	var colors := {"easy": "green", "medium": "orange", "hard": "red"}
-	for key in ["easy", "medium", "hard"]:
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(0, 76)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 26)
-		b.text = ("✓ " if key == difficulty else "") + key.to_upper()
-		UiKit.candy(b, colors[key], false)
-		b.pressed.connect(_restart_from_pause.bind(key))
-		pause_diff_box.add_child(b)
-
-
-## Ends the current run (it still counts if anything was dropped) and starts a new one,
-## optionally on another difficulty.
-func _restart_from_pause(new_difficulty: String) -> void:
+## Ends the current run (it still counts if anything was dropped) and starts a new one.
+func _restart_from_pause(_unused := "") -> void:
 	Sfx.play("click")
 	_abandon_run()
 	get_tree().paused = false
 	if mode == "daily" and Save.attempts_left() <= 0:
 		_go_menu()
 		return
-	if new_difficulty != "" and new_difficulty != difficulty:
-		Save.data["difficulty"] = new_difficulty
-		Save.save()
-		get_tree().reload_current_scene()
-		return
 	_start_run()
+
+
+func _levels_from_pause() -> void:
+	_abandon_run()
+	_go_levels()
 
 
 func _quit_from_pause() -> void:
@@ -830,14 +935,12 @@ func _quit_from_pause() -> void:
 	_go_menu()
 
 
-## Saves a run that was quit midway, so daily tries can't be dodged and free-play bests aren't lost.
+## Saves a run that was quit midway, so daily tries can't be dodged and it shows in history.
 func _abandon_run() -> void:
 	if game_over or drops == 0:
 		return
 	game_over = true
-	Save.record_run(mode, score, {
-		"merges": merges, "best_tier": best_tier, "flips": flips_used,
-		"shakes": shakes_used, "secs": int(run_time), "diff": difficulty})
+	Save.record_run(mode, score, _run_stats())
 
 
 func _share_whatsapp() -> void:
@@ -855,13 +958,14 @@ func _copy_result() -> void:
 
 func _add_score(points: int) -> void:
 	score += points
-	UiKit.punch(score_label, clampf(0.12 + points * 0.01, 0.12, 0.45))
+	if mode != "level":
+		UiKit.punch(score_label, clampf(0.12 + points * 0.01, 0.12, 0.45))
 
 
 func _update_ui() -> void:
 	if game_over or shown_score > score:
 		shown_score = score
-	score_label.text = str(shown_score)
+	score_label.text = "LEVEL %d" % level if mode == "level" else str(shown_score)
 	flip_button.text = "FLIP %d" % flips_left
 	shake_button.text = "SHAKE %d" % shakes_left
 	flip_button.disabled = flips_left <= 0 or game_over
@@ -870,15 +974,22 @@ func _update_ui() -> void:
 
 func _show_hint(text: String) -> void:
 	hint_label.text = text
-	var tw := create_tween()
-	tw.tween_property(hint_label, "modulate:a", 1.0, 0.3)
+	_fade_hint(1.0, 0.3)
 
 
 func _hide_hint() -> void:
-	if hint_label.modulate.a <= 0.0:
+	_fade_hint(0.0, 0.4)
+
+
+## One hint animation at a time, so a hide always wins over an earlier show.
+func _fade_hint(to: float, secs: float) -> void:
+	if hint_tween != null and hint_tween.is_valid():
+		hint_tween.kill()
+	if secs <= 0.0:
+		hint_label.modulate.a = to
 		return
-	var tw := create_tween()
-	tw.tween_property(hint_label, "modulate:a", 0.0, 0.4)
+	hint_tween = create_tween()
+	hint_tween.tween_property(hint_label, "modulate:a", to, secs)
 
 
 func _toast(text: String) -> void:

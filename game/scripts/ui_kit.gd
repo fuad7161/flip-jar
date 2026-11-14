@@ -201,3 +201,25 @@ static func card(c := Color(1, 1, 1, 0.12), radius := 30) -> StyleBoxFlat:
 	b.content_margin_bottom = 16
 	b.anti_aliasing = true
 	return b
+
+
+## A column of related controls stacked top to bottom. Columns sit side by side in an
+## HBoxContainer. No card or heading is drawn: just the buttons, in order.
+static func group(_title: String, items: Array, _tint := Color.TRANSPARENT) -> Control:
+	var p := MarginContainer.new()
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	p.add_child(v)
+	for it in items:
+		v.add_child(it)
+	return p
+
+
+## Hides a group column when none of its buttons are visible.
+static func sync_group(p: Control) -> void:
+	var any := false
+	for c in p.get_child(0).get_children():
+		if c is Button and c.visible:
+			any = true
+	p.visible = any

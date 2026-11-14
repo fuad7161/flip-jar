@@ -48,8 +48,67 @@ def delay(samples, seconds):
     return [0.0] * int(seconds * RATE) + samples
 
 
-# Soft wet thud for a landing piece.
-write("drop", mix(tone(0.12, 160, 70, decay=0.05, harmonics=(1.0, 0.3)), tone(0.04, 900, 300, decay=0.015, noise=0.6)))
+def lowpass(samples, cutoff):
+    """One-pole low-pass: rounds off harsh edges."""
+    a = 1.0 - math.exp(-2 * math.pi * cutoff / RATE)
+    out, y = [], 0.0
+    for s in samples:
+        y += a * (s - y)
+        out.append(y)
+    return out
+
+
+def jelly_plop():
+    """Landing sound: a round, rising 'bloop' (like a drop into water) over a soft low thump,
+    a woody overtone for body and a tiny muffled tap. The game pitches it by piece size."""
+    dur = 0.26
+    n = int(dur * RATE)
+    rnd = random.Random(3)
+    out = []
+    ph_body = ph_over = ph_sub = 0.0
+    noise = 0.0
+    for i in range(n):
+        t = i / RATE
+        # Pitch glides up quickly then settles: the 'bloop' of a jelly hitting something.
+        f_body = 200.0 * (1.0 + 0.65 * (1.0 - math.exp(-t / 0.014)))
+        f_sub = 92.0 * (1.0 - 0.3 * (1.0 - math.exp(-t / 0.03)))
+        ph_body += 2 * math.pi * f_body / RATE
+        ph_over += 2 * math.pi * f_body * 2.76 / RATE
+        ph_sub += 2 * math.pi * f_sub / RATE
+        attack = 1.0 - math.exp(-t / 0.0018)
+        body = math.sin(ph_body) * math.exp(-t / 0.065)
+        # A light wobble on the body makes it read as squishy rather than a pure beep.
+        body *= 1.0 + 0.18 * math.sin(2 * math.pi * 26.0 * t) * math.exp(-t / 0.08)
+        over = 0.22 * math.sin(ph_over) * math.exp(-t / 0.016)
+        sub = 0.75 * math.sin(ph_sub) * math.exp(-t / 0.045)
+        noise += 0.22 * ((rnd.random() * 2 - 1) - noise)  # muffled noise
+        tap = 0.35 * noise * math.exp(-t / 0.005)
+        s = attack * (body + over + sub) + tap
+        if i > n - int(0.015 * RATE):
+            s *= (n - i) / (0.015 * RATE)
+        out.append(s)
+    return lowpass(out, 3800.0)
+
+
+def chime(freq, dur=0.5):
+    """Bright bell for each star earned: inharmonic partials decaying at different rates."""
+    n = int(dur * RATE)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        a = 1.0 - math.exp(-t / 0.002)
+        s = (math.sin(2 * math.pi * freq * t) * math.exp(-t / 0.22)
+             + 0.35 * math.sin(2 * math.pi * freq * 2.0 * t) * math.exp(-t / 0.12)
+             + 0.18 * math.sin(2 * math.pi * freq * 2.76 * t) * math.exp(-t / 0.06)
+             + 0.08 * math.sin(2 * math.pi * freq * 5.4 * t) * math.exp(-t / 0.03))
+        out.append(a * s)
+    return out
+
+
+# Jelly plop for a landing piece.
+write("drop", jelly_plop())
+# Star chime on the level result screen (pitched up for each star).
+write("star", mix(chime(1318.5), delay(chime(1975.5, 0.4), 0.05)))
 # Bubble pop for a merge; the game pitches it per tier.
 write("pop", mix(tone(0.16, 720, 260, decay=0.07, harmonics=(1.0, 0.4, 0.15)), tone(0.03, 2000, 800, decay=0.01, noise=0.5)))
 # Whoosh for the jar flip.

@@ -127,8 +127,8 @@ func _build() -> void:
 	var stats := [
 		["Games", str(games)],
 		["Best score", str(best_any)],
-		["Total score", str(total)],
-		["Average", str(total / games) if games > 0 else "-"],
+		["Levels cleared", "%d / %d" % [Save.levels_cleared(), Levels.COUNT]],
+		["Stars", "★ %d / %d" % [Save.total_stars(), Levels.COUNT * 3]],
 		["Merges", str(int(Save.data["total_merges"]))],
 		["Biggest buddy", Tiers.tier_name(int(Save.data["best_tier"]))],
 		["Daily streak", "%d (best %d)" % [Save.current_streak(), int(Save.data["streak_best"])]],
@@ -158,8 +158,11 @@ func _build() -> void:
 
 func _history_row(h: Dictionary, number: int) -> Control:
 	var daily: bool = h.get("mode", "free") == "daily"
+	var is_level: bool = h.get("mode", "") == "level"
 	var panel := PanelContainer.new()
 	var tint := Color("#ff9a2e") if daily else Color("#3fd56b")
+	if is_level and not h.get("won", false):
+		tint = Color("#a45cff")
 	panel.add_theme_stylebox_override("panel", UiKit.card(Color(tint.r, tint.g, tint.b, 0.28), 26))
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 14)
@@ -172,14 +175,19 @@ func _history_row(h: Dictionary, number: int) -> Control:
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_theme_constant_override("separation", 0)
-	var head := "#%d  %s" % [number, "DAILY" if daily else str(h.get("diff", "medium")).to_upper()]
+	var head := "#%d  %s" % [number, "DAILY" if daily else str(h.get("diff", "free")).to_upper()]
+	if is_level:
+		var st := int(h.get("stars", 0))
+		head = "#%d  LEVEL %d  %s" % [number, int(h.get("level", 1)),
+			"★".repeat(st) + "☆".repeat(3 - st) if h.get("won", false) else "· failed"]
 	if h.get("new_best", false):
-		head += "  ★ BEST"
+		head += "  BEST" if is_level else "  ★ BEST"
 	left.add_child(_label(head, 24, Color("#ffe14d") if h.get("new_best", false) else Color.WHITE, false))
 	var when := Time.get_datetime_string_from_unix_time(int(h.get("t", 0)) + _tz_offset(), true)
 	left.add_child(_label(when.substr(0, 16), 18, Color(1, 1, 1, 0.75), false))
 	left.add_child(_label("%d merges · %d flips · %d shakes · %s" % [
-		int(h.get("merges", 0)), int(h.get("flips", 0)), int(h.get("shakes", 0)), _fmt_short(int(h.get("secs", 0)))],
+		int(h.get("merges", 0)), int(h.get("flips", 0)), int(h.get("shakes", 0)),
+		Levels.fmt_time(float(h.get("time", 0.0))) if is_level and h.get("won", false) else _fmt_short(int(h.get("secs", 0)))],
 		18, Color(1, 1, 1, 0.85), false))
 	hb.add_child(left)
 	var score := _label(str(int(h.get("score", 0))), 44, Color("#ffe14d"), false)

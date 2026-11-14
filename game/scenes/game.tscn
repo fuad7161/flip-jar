@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
 [ext_resource type="Script" path="res://scripts/preview.gd" id="2_preview"]
 [ext_resource type="Script" path="res://scripts/background.gd" id="3_bg"]
+[ext_resource type="Script" path="res://scripts/level_bar.gd" id="4_lbar"]
 
 [sub_resource type="StyleBoxFlat" id="panel_bg"]
 bg_color = Color(0.16, 0.05, 0.3, 0.82)
@@ -43,7 +44,7 @@ offset_bottom = 124.0
 theme_override_colors/font_color = Color(1, 0.9, 1, 0.9)
 theme_override_constants/outline_size = 6
 theme_override_font_sizes/font_size = 22
-text = "FREE PLAY"
+text = "LEVEL 1"
 vertical_alignment = 1
 
 [node name="NextLabel" type="Label" parent="UI"]
@@ -106,6 +107,16 @@ offset_bottom = 204.0
 max_value = 1.0
 step = 0.0
 show_percentage = false
+
+[node name="LevelBar" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 24.0
+offset_top = 1062.0
+offset_right = 696.0
+offset_bottom = 1250.0
+mouse_filter = 2
+script = ExtResource("4_lbar")
 
 [node name="Hint" type="Label" parent="UI"]
 offset_left = 60.0
@@ -179,30 +190,6 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
-[node name="Retry" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 104)
-layout_mode = 2
-theme_override_font_sizes/font_size = 38
-text = "PLAY AGAIN"
-
-[node name="Share" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 96)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "SHARE ON WHATSAPP"
-
-[node name="Copy" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 84)
-layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "COPY RESULT"
-
-[node name="Menu" type="Button" parent="UI/GameOver/Box"]
-custom_minimum_size = Vector2(0, 84)
-layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "MENU"
-
 [node name="Pause" type="Panel" parent="UI"]
 process_mode = 3
 visible = false
@@ -244,33 +231,3 @@ theme_override_font_sizes/font_size = 24
 text = "Score 0"
 horizontal_alignment = 1
 autowrap_mode = 2
-
-[node name="Resume" type="Button" parent="UI/Pause/Box"]
-custom_minimum_size = Vector2(0, 104)
-layout_mode = 2
-theme_override_font_sizes/font_size = 38
-text = "RESUME"
-
-[node name="Restart" type="Button" parent="UI/Pause/Box"]
-custom_minimum_size = Vector2(0, 88)
-layout_mode = 2
-theme_override_font_sizes/font_size = 30
-text = "RESTART"
-
-[node name="DiffLabel" type="Label" parent="UI/Pause/Box"]
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.92, 1, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 22
-text = "NEW GAME ON"
-horizontal_alignment = 1
-
-[node name="Difficulty" type="HBoxContainer" parent="UI/Pause/Box"]
-layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="Menu" type="Button" parent="UI/Pause/Box"]
-custom_minimum_size = Vector2(0, 84)
-layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "QUIT TO MENU"

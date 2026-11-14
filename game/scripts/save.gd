@@ -8,7 +8,8 @@ const HISTORY_MAX := 100
 
 var data := {}
 var disabled := false   # tests set this so nothing is written to disk
-var mode := "free"      # "free" or "daily", chosen on the menu
+var mode := "level"     # "level" or "daily", chosen on the menu
+var level := 1          # which level to play when mode is "level"
 
 
 func _ready() -> void:
@@ -36,8 +37,7 @@ func _defaults() -> Dictionary:
 		"total_merges": 0,
 		"total_secs": 0,
 		"best_tier": 0,
-		"difficulty": "medium",
-		"best_diff": {"easy": 0, "medium": 0, "hard": 0},
+		"levels": {},       # "n" -> {"stars": int, "secs": float}: best stars and best time per cleared level
 	}
 
 
@@ -54,8 +54,11 @@ func load_data() -> void:
 			data[k] = parsed[k]
 	if not (data["history"] is Array):
 		data["history"] = []
-	if not (data["best_diff"] is Dictionary):
-		data["best_diff"] = {"easy": 0, "medium": 0, "hard": 0}
+	if not (data["levels"] is Dictionary):
+		data["levels"] = {}
+	# Old saves had easy/medium/hard free play; those keys are no longer used.
+	data.erase("difficulty")
+	data.erase("best_diff")
 	if not (data["profile"] is Dictionary):
 		data["profile"] = {"name": "Player", "avatar": 2}
 
@@ -115,13 +118,11 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 		data["daily"]["best"] = maxi(score, int(data["daily"]["best"]))
 		best = int(data["daily"]["best"])
 		_update_streak()
-	else:
-		var diff: String = stats.get("diff", "medium")
-		var bd: Dictionary = data["best_diff"]
-		new_best = score > int(bd.get(diff, 0))
-		bd[diff] = maxi(score, int(bd.get(diff, 0)))
-		best = int(bd[diff])
+	elif run_mode == "level":
 		data["best_free"] = maxi(score, int(data["best_free"]))
+		if stats.get("won", false):
+			var lv := _record_level_win(int(stats.get("level", 1)), float(stats.get("time", 0.0)), int(stats.get("stars", 1)))
+			new_best = lv["new_best"]
 	data["games_played"] = int(data["games_played"]) + 1
 	data["first_run_done"] = true
 	var entry := {
@@ -133,7 +134,10 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 		"flips": int(stats.get("flips", 0)),
 		"shakes": int(stats.get("shakes", 0)),
 		"secs": int(stats.get("secs", 0)),
-		"diff": str(stats.get("diff", "medium")),
+		"level": int(stats.get("level", 0)),
+		"won": bool(stats.get("won", false)),
+		"stars": int(stats.get("stars", 0)),
+		"time": snappedf(float(stats.get("time", 0.0)), 0.1),
 		"new_best": new_best,
 	}
 	var hist: Array = data["history"]
@@ -149,9 +153,48 @@ func record_run(run_mode: String, score: int, stats := {}) -> Dictionary:
 	return {"new_best": new_best, "best": best}
 
 
-## Best free-play score on one difficulty.
-func best_for(diff: String) -> int:
-	return int(data["best_diff"].get(diff, 0))
+## Keeps the most stars and the fastest time for a cleared level.
+## Returns {"new_best": bool (faster time), "first": bool (first clear), "prev": Dictionary}.
+func _record_level_win(n: int, secs: float, stars: int) -> Dictionary:
+	var key := str(n)
+	var lv: Dictionary = data["levels"]
+	var prev: Dictionary = lv.get(key, {}).duplicate()
+	var first := prev.is_empty()
+	var faster := first or secs < float(prev.get("secs", INF))
+	lv[key] = {
+		"stars": maxi(stars, int(prev.get("stars", 0))),
+		"secs": snappedf(secs if faster else float(prev["secs"]), 0.1),
+	}
+	data["levels"] = lv
+	return {"new_best": faster, "first": first, "prev": prev}
+
+
+## Best result for level `n`, or {} if it was never cleared.
+func level_info(n: int) -> Dictionary:
+	return data["levels"].get(str(n), {})
+
+
+## The highest level you may play: one past the last cleared level.
+func unlocked_level() -> int:
+	var n := 1
+	while n < Levels.COUNT and not level_info(n).is_empty():
+		n += 1
+	return n
+
+
+func is_unlocked(n: int) -> bool:
+	return n >= 1 and n <= unlocked_level()
+
+
+func total_stars() -> int:
+	var total := 0
+	for k in data["levels"]:
+		total += int(data["levels"][k].get("stars", 0))
+	return total
+
+
+func levels_cleared() -> int:
+	return data["levels"].size()
 
 
 func _update_streak() -> void:

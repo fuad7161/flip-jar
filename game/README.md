@@ -9,7 +9,12 @@ See `../Knowledge.md` for the full brief.
 3. Mouse emulates touch: drag to aim, release to drop. Click FLIP to flip the jar.
 
 ## Files
-- `scenes/menu.tscn`, `scripts/menu.gd`   main menu: daily, free play, streak, themes, settings
+- `scenes/menu.tscn`, `scripts/menu.gd`   main menu: LEVEL / DAILY, then LEVELS / SETTINGS (sound, music, vibration, themes popup) / EXIT
+- `scripts/icon_button.gd`, `scripts/icons.gd`   candy buttons with a drawn icon and a small caption; the icon set
+- `scenes/levels.tscn`, `scripts/levels_screen.gd`   level select: best stars and time per level, locked levels
+- `scripts/levels.gd`    the 60-level ladder (goal, time limit, jar settings per level), star rules, daily settings
+- `scripts/level_bar.gd` level HUD under the jar: GOAL tube on top fills with score, TIME tube below drains, star chips at the cut-offs
+- `scripts/star_row.gd`  the animated 3-star row on the result screen
 - `scenes/game.tscn`, `scripts/game.gd`   game loop: jar, drop, merge, flip, overflow, score, juice, result screen
 - `scripts/piece.gd`     one jelly piece: droplet stretch in flight, squash and wobble on impact, merge contacts
 - `scripts/tiers.gd`     tier sizes, names and the three color palettes; the face drawing
@@ -27,7 +32,14 @@ and checks the save logic. Takes about two minutes of real time.
 ```
 godot --headless --path game --script res://tests/smoke.gd
 ```
-Prints `SMOKE OK` and exits 0 on success.
+Prints `SMOKE OK` and exits 0 on success. Add `--fixed-fps 60` to run it as fast as the CPU allows.
+
+## Level tuning bot
+Plays levels at a human-like pace (aims at matching pieces) and prints clear times and stars:
+```
+godot --headless --fixed-fps 60 --path game --script res://tests/level_sim.gd -- 1,10,30,60 1.2 3
+```
+Arguments: level list, seconds between drops, runs per level. Tune the curve in `scripts/levels.gd`.
 
 ## Regenerate assets
 ```
